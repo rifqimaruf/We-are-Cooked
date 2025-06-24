@@ -1,6 +1,8 @@
 import pygame
 import sys
-import pickle
+import json
+import socket
+import threading
 from src.network import Network
 from src.shared import config
 
@@ -9,6 +11,8 @@ pygame.init()
 tile_size = 50
 screen = pygame.display.set_mode((config.GRID_WIDTH * tile_size, config.GRID_HEIGHT * tile_size))
 clock = pygame.time.Clock()
+
+current_state = None
 
 def draw(state):
     screen.fill((255, 255, 255))
@@ -21,41 +25,44 @@ def draw(state):
         screen.blit(img, (rect.x, rect.y))
     pygame.display.flip()
 
+def receiver_thread(net):
+    global current_state
+    while True:
+        try:
+            state = net.receive()
+            current_state = state
+        except (json.JSONDecodeError, socket.error):
+            break
+
 def main():
     net = Network()
-    
     print("Waiting for initial state...")
-    state = net.receive()
-    print("Got initial state:", state)
-    
+    global current_state
+    current_state = net.receive()
+    print(f"Got initial state: {current_state}")
+
+    threading.Thread(target=receiver_thread, args=(net,), daemon=True).start()
+
     while True:
-        clock.tick(10)
-        
+        clock.tick(30)
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
 
         keys = pygame.key.get_pressed()
-        sent = False
         if keys[pygame.K_UP]:
             net.send({"action": "move", "direction": "UP"})
-            sent = True
         elif keys[pygame.K_DOWN]:
             net.send({"action": "move", "direction": "DOWN"})
-            sent = True
         elif keys[pygame.K_LEFT]:
             net.send({"action": "move", "direction": "LEFT"})
-            sent = True
         elif keys[pygame.K_RIGHT]:
             net.send({"action": "move", "direction": "RIGHT"})
-            sent = True
 
-        if sent:
-            state = net.receive()
-            print("Updated state:", state)
-
-        draw(state)
+        if current_state:
+            draw(current_state)
 
 if __name__ == "__main__":
     main()
