@@ -1,5 +1,6 @@
 import pygame
 import sys
+import pickle
 from src.network import Network
 from src.shared import config
 
@@ -22,26 +23,38 @@ def draw(state):
 
 def main():
     net = Network()
+    
+    print("Waiting for initial state...")
     state = net.receive()
-
+    print("Got initial state:", state)
+    
     while True:
         clock.tick(10)
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
 
         keys = pygame.key.get_pressed()
+        sent = False
         if keys[pygame.K_UP]:
             net.send({"action": "move", "direction": "UP"})
+            sent = True
         elif keys[pygame.K_DOWN]:
             net.send({"action": "move", "direction": "DOWN"})
+            sent = True
         elif keys[pygame.K_LEFT]:
             net.send({"action": "move", "direction": "LEFT"})
+            sent = True
         elif keys[pygame.K_RIGHT]:
             net.send({"action": "move", "direction": "RIGHT"})
+            sent = True
 
-        state = net.receive()
+        if sent:
+            state = net.receive()
+            print("Updated state:", state)
+
         draw(state)
 
 if __name__ == "__main__":

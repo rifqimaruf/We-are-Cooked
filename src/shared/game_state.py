@@ -1,5 +1,5 @@
-from shared import config
-from shared.recipe_manager import recipe_manager
+from src.shared import config
+from src.shared.recipe_manager import recipe_manager
 
 class PlayerState:
     def __init__(self, player_id, ingredient, pos):
@@ -52,3 +52,7 @@ class GameState:
             "score": self.score,
             "timer": self.timer
         }
+
+    def remove_player(self, player_id):
+        if player_id in self.players:
+            del self.players[player_id]
