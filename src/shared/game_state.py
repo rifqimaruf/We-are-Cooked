@@ -1,4 +1,4 @@
-import config
+from shared import config
 from shared.recipe_manager import recipe_manager
 
 class PlayerState:

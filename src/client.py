@@ -1,7 +1,7 @@
 import pygame
 import sys
-from network import Network
-import config
+from src.network import Network
+from src.shared import config
 
 pygame.init()
 

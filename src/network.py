@@ -1,6 +1,6 @@
 import socket
 import json
-import config
+from src.shared import config
 
 class Network:
     def __init__(self):

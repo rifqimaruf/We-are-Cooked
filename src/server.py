@@ -3,7 +3,7 @@ import threading
 import json
 import random
 from shared.game_state import GameState
-import config
+from src.shared import config
 
 game_state = GameState()
 
