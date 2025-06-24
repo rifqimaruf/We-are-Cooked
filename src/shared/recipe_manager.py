@@ -9,16 +9,16 @@ class RecipeManager:
             cls._instance = super(RecipeManager, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, db_path='src/shared/recipes.db'):
+    def __init__(self, db_path=None):
         if hasattr(self, '_initialized'):
             return
-        
+
+        if db_path is None:
+            base_dir = os.path.dirname(__file__)
+            db_path = os.path.join(base_dir, 'recipes.db')
+
         if not os.path.exists(db_path):
-            alt_path = os.path.join('..', 'shared', 'recipes.db')
-            if os.path.exists(alt_path):
-                db_path = alt_path
-            else:
-                 raise FileNotFoundError(f"Database tidak ditemukan di {db_path} atau {alt_path}")
+            raise FileNotFoundError(f"Database tidak ditemukan di {db_path}")
 
         self.db_path = db_path
         self._recipes_cache = self._load_recipes_to_cache()
