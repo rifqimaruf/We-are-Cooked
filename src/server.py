@@ -2,6 +2,7 @@ import socket
 import threading
 import json
 import random
+import time
 
 from src.shared.game_state import GameState
 from src.shared import config
@@ -69,7 +70,30 @@ def handle_client(conn, addr):
         conn.close()
         print(f"[DISCONNECT] {addr} disconnected.")
 
+def timer_thread():
+    """Update the game timer every second"""
+    last_update = time.time()
+    while True:
+        current_time = time.time()
+        if current_time - last_update >= 1.0:
+            game_state.timer = max(0, game_state.timer - 1)
+            last_update = current_time
+            
+            # Broadcast state every 5 seconds or when timer reaches 0
+            if game_state.timer % 5 == 0 or game_state.timer == 0:
+                broadcast_state()
+                
+            # Game over condition
+            if game_state.timer == 0:
+                print(f"Game Over! Final Score: {game_state.score}")
+                # Here you could implement game reset logic
+                
+        time.sleep(0.1)  # Small sleep to prevent CPU hogging
+
 def start():
+    # Start the timer thread
+    threading.Thread(target=timer_thread, daemon=True).start()
+    
     while True:
         conn, addr = server.accept()
         thread = threading.Thread(target=handle_client, args=(conn, addr), daemon=True)
