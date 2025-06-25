@@ -71,22 +71,40 @@ def handle_client(conn, addr):
         print(f"[DISCONNECT] {addr} disconnected.")
 
 def timer_thread():
-    """Update the game timer every second"""
-    last_update = time.time()
+    """Update the game timer using absolute time calculation with consistent broadcasting"""
+    start_time = time.time()
+    game_duration = game_state.timer
+    end_time = start_time + game_duration
+    
+    # Calculate broadcast intervals - every second for the first 10 seconds, then every 5 seconds
+    next_broadcast_time = start_time
+    broadcast_interval = 1.0  # Start with 1-second intervals
+    
     while True:
         current_time = time.time()
-        if current_time - last_update >= 1.0:
-            game_state.timer = max(0, game_state.timer - 1)
-            last_update = current_time
+        remaining = max(0, end_time - current_time)
+        
+        game_state.timer = int(remaining)
+        
+        if current_time >= next_broadcast_time:
+            broadcast_state()
             
-            # Broadcast state every 5 seconds or when timer reaches 0
-            if game_state.timer % 5 == 0 or game_state.timer == 0:
-                broadcast_state()
+            if remaining <= 10:
+                broadcast_interval = 1.0
+            elif remaining <= 30:
+                broadcast_interval = 2.0
+            else:
+                broadcast_interval = 5.0
                 
-            # Game over condition
-            if game_state.timer == 0:
-                print(f"Game Over! Final Score: {game_state.score}")
-                # Here you could implement game reset logic
+            next_broadcast_time = current_time + broadcast_interval
+        
+        # Game over condition
+        if remaining <= 0:
+            game_state.timer = 0
+            broadcast_state()
+            print(f"Game Over! Final Score: {game_state.score}")
+            # implement game reset logic
+            break
                 
         time.sleep(0.1)  # Small sleep to prevent CPU hogging
 

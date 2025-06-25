@@ -22,6 +22,8 @@ current_state = None
 
 def format_time(seconds):
     """Convert seconds to MM:SS format"""
+    # Ensure we're working with an integer for display
+    seconds = int(seconds)
     minutes = seconds // 60
     seconds = seconds % 60
     return f"{minutes:02d}:{seconds:02d}"
@@ -34,14 +36,40 @@ def draw(state):
     game_area = pygame.Rect(0, 0, screen_width, screen_height - ui_height)
     pygame.draw.rect(screen, (240, 240, 240), game_area)
     
+    client_id = state.get("client_id")
+
     # Draw players
-    for player in state["players"].values():
+    for player_id, player in state["players"].items():
         x, y = player["pos"]
         rect = pygame.Rect(x * tile_size, y * tile_size, tile_size, tile_size)
-        pygame.draw.rect(screen, (0, 200, 0), rect)
+        
+        if player_id == client_id:
+            pygame.draw.rect(screen, (0, 150, 255), rect)
+        else:
+            pygame.draw.rect(screen, (0, 200, 0), rect)
+            
         font = pygame.font.SysFont(None, 24)
         img = font.render(player["ingredient"], True, (0, 0, 0))
         screen.blit(img, (rect.x, rect.y))
+
+    # Draw current client's ingredient
+    client_ingredient = None
+    
+    if client_id and client_id in state["players"]:
+        client_ingredient = state["players"][client_id]["ingredient"]
+    
+    if client_ingredient:
+        ingredient_bg = pygame.Rect(10, 10, 250, 50)
+        pygame.draw.rect(screen, (50, 50, 50), ingredient_bg)
+        pygame.draw.rect(screen, (100, 100, 100), ingredient_bg, 2)
+        
+        ingredient_title_font = pygame.font.SysFont(None, 18)
+        ingredient_text = ingredient_title_font.render(f"you are:", True, (200, 200, 200))
+        screen.blit(ingredient_text, (20, 18))
+
+        ingredient_font = pygame.font.SysFont(None, 24)
+        ingredient_text = ingredient_font.render(client_ingredient, True, (255, 255, 255))
+        screen.blit(ingredient_text, (20, 35))
     
     # Draw UI background
     ui_area = pygame.Rect(0, screen_height - ui_height, screen_width, ui_height)
@@ -50,7 +78,7 @@ def draw(state):
     # Draw score
     score_font = pygame.font.SysFont(None, 28)
     score_text = score_font.render(f"Score: {state['score']}", True, (255, 255, 255))
-    screen.blit(score_text, (20, screen_height - ui_height + 15))
+    screen.blit(score_text, (20, screen_height - ui_height + 20))
     
     # Draw timer with color based on remaining time
     timer_font = pygame.font.SysFont(None, 28)
@@ -95,7 +123,7 @@ def draw(state):
     if "orders" in state and state["orders"]:
         order_font = pygame.font.SysFont(None, 24)
         order_text = order_font.render(f"Orders: {', '.join([order['name'] for order in state['orders'][:2]])}", True, (255, 255, 255))
-        screen.blit(order_text, (screen_width - 250, screen_height - ui_height + 15))
+        screen.blit(order_text, (screen_width - 250, screen_height - ui_height + 25))
     
     pygame.display.flip()
 
@@ -114,6 +142,11 @@ def main():
     global current_state
     current_state = net.receive()
     print(f"Got initial state: {current_state}")
+    
+    # Store the client's player ID (using the client's socket address)
+    client_addr = net.get_addr()
+    client_id = str(client_addr)
+    print(f"Your player ID: {client_id}")
 
     threading.Thread(target=receiver_thread, args=(net,), daemon=True).start()
     
@@ -121,9 +154,18 @@ def main():
     start_time = time.time()
     initial_timer = current_state.get("timer", config.GAME_TIMER_SECONDS)
     game_end_time = start_time + initial_timer
+    
+    # Variables for smooth timer adjustment
+    target_timer = initial_timer
+    displayed_timer = initial_timer
+    last_frame_time = time.time()
 
     while True:
-        clock.tick(30)
+        current_time = time.time()
+        delta_time = current_time - last_frame_time
+        last_frame_time = current_time
+        
+        clock.tick(60)  # Increase frame rate for smoother updates
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -144,18 +186,30 @@ def main():
             # Create a copy of the current state to modify locally
             display_state = current_state.copy()
             
+            # Add client ID to the state for the draw function to use
+            display_state["client_id"] = client_id
+            
+            # Calculate target time based on server updates
+            if "timer" in current_state:
+                server_timer = current_state["timer"]
+                # Only make major adjustments if the difference is significant
+                if abs(server_timer - displayed_timer) > 3:
+                    target_timer = server_timer
+                    # Adjust game_end_time based on the new target
+                    game_end_time = current_time + target_timer
+            
             # Calculate remaining time based on absolute end time
-            now = time.time()
-            remaining_seconds = max(0, int(game_end_time - now))
+            remaining_seconds = max(0, game_end_time - current_time)
             
-            # If server sends a timer update, recalculate the end time
-            if "timer" in current_state and abs(current_state["timer"] - remaining_seconds) > 2:
-                # Only adjust if the difference is significant (>2 seconds)
-                game_end_time = now + current_state["timer"]
-                remaining_seconds = current_state["timer"]
-            
-            # Update the display state with our smooth timer
-            display_state["timer"] = remaining_seconds
+            # Smoothly interpolate between current displayed time and target time
+            if abs(displayed_timer - remaining_seconds) > 0.05:
+                # Interpolate with a small step for smooth transition
+                displayed_timer = displayed_timer + (remaining_seconds - displayed_timer) * min(1.0, delta_time * 2)
+            else:
+                displayed_timer = remaining_seconds
+                
+            # Update the display state with our smooth timer (convert to int for display)
+            display_state["timer"] = int(displayed_timer)
             
             draw(display_state)
 
