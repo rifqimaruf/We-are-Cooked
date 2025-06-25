@@ -10,7 +10,6 @@ from src.shared import config
 pygame.init()
 
 tile_size = 50
-# Add extra height for UI elements
 ui_height = 60
 screen_width = config.GRID_WIDTH * tile_size
 screen_height = (config.GRID_HEIGHT * tile_size) + ui_height
@@ -19,6 +18,10 @@ pygame.display.set_caption("We are Cooked")
 clock = pygame.time.Clock()
 
 current_state = None
+game_screen_state = config.GAME_STATE_END_SCREEN
+# game_screen_state = config.GAME_STATE_PLAYING
+overlay_start_time = 0
+final_score = 0
 
 def format_time(seconds):
     """Convert seconds to MM:SS format"""
@@ -27,6 +30,56 @@ def format_time(seconds):
     minutes = seconds // 60
     seconds = seconds % 60
     return f"{minutes:02d}:{seconds:02d}"
+
+def draw_end_screen():
+    """Draw the end screen with final score and restart button"""
+    try:
+        bg_image = pygame.image.load("/home/reivertt/Repositories/We-are-Cooked/assets/images/end_bg.png")
+        bg_image = pygame.transform.scale(bg_image, (screen_width, screen_height))
+        screen.blit(bg_image, (0, 0))
+    except pygame.error:
+        screen.fill((30, 30, 50))
+        print("Warning: Could not load end_bg.png, using fallback background")
+    
+    # Create a semi-transparent overlay for better text readability
+    # overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+    # overlay.fill((0, 0, 0, 120))  # Black with 47% opacity
+    # screen.blit(overlay, (0, 0))
+    
+    # Draw game title
+    # title_font = pygame.font.SysFont(None, 72)
+    # title_text = title_font.render("We are Cooked!", True, (255, 220, 100))
+    # title_rect = title_text.get_rect(center=(screen_width // 2, screen_height // 4))
+    # screen.blit(title_text, title_rect)
+    
+    # Draw final score
+    score_font = pygame.font.SysFont(None, 48)
+    score_text = score_font.render(f"Final Score: {final_score}", True, (0, 0, 0))
+    score_rect = score_text.get_rect(center=(screen_width // 2, screen_height // 2 + 150))
+    screen.blit(score_text, score_rect)
+    
+    # Draw restart button
+    button_width, button_height = 200, 60
+    button_x = (screen_width - button_width) // 2
+    button_y = (screen_height * 3) // 4
+    button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+    
+    # Check if mouse is hovering over button
+    mouse_pos = pygame.mouse.get_pos()
+    button_color = (100, 200, 100) if button_rect.collidepoint(mouse_pos) else (80, 180, 80)
+    
+    pygame.draw.rect(screen, button_color, button_rect, border_radius=10)
+    pygame.draw.rect(screen, (50, 150, 50), button_rect, 3, border_radius=10)
+    
+    # Draw button text
+    button_font = pygame.font.SysFont(None, 36)
+    button_text = button_font.render("Play Again", True, (255, 255, 255))
+    button_text_rect = button_text.get_rect(center=button_rect.center)
+    screen.blit(button_text, button_text_rect)
+    
+    pygame.display.flip()
+    
+    return button_rect  
 
 def draw(state):
     # Clear the screen
@@ -123,7 +176,7 @@ def draw(state):
     if "orders" in state and state["orders"]:
         order_font = pygame.font.SysFont(None, 24)
         order_text = order_font.render(f"Orders: {', '.join([order['name'] for order in state['orders'][:2]])}", True, (255, 255, 255))
-        screen.blit(order_text, (screen_width - 250, screen_height - ui_height + 25))
+        screen.blit(order_text, (screen_width - 500, screen_height - ui_height + 25))
     
     pygame.display.flip()
 
@@ -137,9 +190,10 @@ def receiver_thread(net):
             break
 
 def main():
+    global current_state, game_screen_state, overlay_start_time, final_score
+    
     net = Network()
     print("Waiting for initial state...")
-    global current_state
     current_state = net.receive()
     print(f"Got initial state: {current_state}")
     
@@ -150,15 +204,9 @@ def main():
 
     threading.Thread(target=receiver_thread, args=(net,), daemon=True).start()
     
-    # For local timer countdown - use absolute start time instead of incremental updates
-    start_time = time.time()
-    initial_timer = current_state.get("timer", config.GAME_TIMER_SECONDS)
-    game_end_time = start_time + initial_timer
-    
-    # Variables for smooth timer adjustment
-    target_timer = initial_timer
-    displayed_timer = initial_timer
     last_frame_time = time.time()
+    
+    restart_button_rect = None
 
     while True:
         current_time = time.time()
@@ -171,47 +219,41 @@ def main():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
+            
+            if game_screen_state == config.GAME_STATE_END_SCREEN and event.type == pygame.MOUSEBUTTONDOWN:
+                if restart_button_rect and restart_button_rect.collidepoint(event.pos):
+                    game_screen_state = config.GAME_STATE_PLAYING
+                    net.send({"action": "restart"})
+                    try:
+                        current_state = net.receive()
+                    except:
+                        print("Error receiving new game state after restart")
 
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_UP]:
-            net.send({"action": "move", "direction": "UP"})
-        elif keys[pygame.K_DOWN]:
-            net.send({"action": "move", "direction": "DOWN"})
-        elif keys[pygame.K_LEFT]:
-            net.send({"action": "move", "direction": "LEFT"})
-        elif keys[pygame.K_RIGHT]:
-            net.send({"action": "move", "direction": "RIGHT"})
+        if game_screen_state == config.GAME_STATE_PLAYING:
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_UP]:
+                net.send({"action": "move", "direction": "UP"})
+            elif keys[pygame.K_DOWN]:
+                net.send({"action": "move", "direction": "DOWN"})
+            elif keys[pygame.K_LEFT]:
+                net.send({"action": "move", "direction": "LEFT"})
+            elif keys[pygame.K_RIGHT]:
+                net.send({"action": "move", "direction": "RIGHT"})
 
-        if current_state:
-            # Create a copy of the current state to modify locally
-            display_state = current_state.copy()
-            
-            # Add client ID to the state for the draw function to use
-            display_state["client_id"] = client_id
-            
-            # Calculate target time based on server updates
-            if "timer" in current_state:
-                server_timer = current_state["timer"]
-                # Only make major adjustments if the difference is significant
-                if abs(server_timer - displayed_timer) > 3:
-                    target_timer = server_timer
-                    # Adjust game_end_time based on the new target
-                    game_end_time = current_time + target_timer
-            
-            # Calculate remaining time based on absolute end time
-            remaining_seconds = max(0, game_end_time - current_time)
-            
-            # Smoothly interpolate between current displayed time and target time
-            if abs(displayed_timer - remaining_seconds) > 0.05:
-                # Interpolate with a small step for smooth transition
-                displayed_timer = displayed_timer + (remaining_seconds - displayed_timer) * min(1.0, delta_time * 2)
-            else:
-                displayed_timer = remaining_seconds
+            if current_state:
+                display_state = current_state.copy()
                 
-            # Update the display state with our smooth timer (convert to int for display)
-            display_state["timer"] = int(displayed_timer)
-            
-            draw(display_state)
+                display_state["client_id"] = client_id
+                
+                if display_state.get("timer", 0) <= 0:
+                    game_screen_state = config.GAME_STATE_END_SCREEN
+                    overlay_start_time = current_time
+                    final_score = display_state.get("score", 0)
+                
+                draw(display_state)
+                
+        elif game_screen_state == config.GAME_STATE_END_SCREEN:
+            restart_button_rect = draw_end_screen()
 
 if __name__ == "__main__":
     main()
