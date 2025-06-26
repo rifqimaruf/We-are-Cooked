@@ -9,6 +9,8 @@ from src.shared import config
 
 game_state = GameState()
 connections = []
+clients_info = {}
+game_started = False
 timer_thread_active = True
 timer_thread_instance = None
 restart_lock = threading.Lock()
@@ -21,20 +23,32 @@ print(f"RecipeManager initialized and recipes cached.")
 print(f"Server listening on {config.SERVER_IP}:{config.SERVER_PORT}")
 
 def broadcast_state():
-    state_json = json.dumps(game_state.to_dict()).encode()
+    state_dict = game_state.to_dict()
+    # Add connected clients info to the state
+    state_dict["clients_info"] = clients_info
+    state_dict["game_started"] = game_started
+    
+    state_json = json.dumps(state_dict).encode()
     dead_conns = []
     for c in connections:
         try:
             c.sendall(state_json)
-        except:
+        except Exception as e:
+            print(f"Error broadcasting to client: {e}")
             dead_conns.append(c)
+    
     for dc in dead_conns:
-        connections.remove(dc)
-        dc.close()
+        try:
+            connections.remove(dc)
+            dc.close()
+        except:
+            pass
+    
+    # print(f"Broadcast state: game_started={game_started}, players={len(game_state.players)}, clients={len(clients_info)}")
 
 def restart_game():
     """Reset the game state and start a new timer thread"""
-    global game_state, timer_thread_active, timer_thread_instance
+    global game_state, timer_thread_active, timer_thread_instance, game_started
     
     with restart_lock:
         if timer_thread_instance and timer_thread_instance.is_alive():
@@ -42,18 +56,24 @@ def restart_game():
             timer_thread_instance.join(timeout=1.0)
         
         game_state = GameState()
+        game_started = True
+        print(f"Setting game_started to {game_started}")
         
+        # Add players to the game state
         for conn in connections:
             try:
                 addr = conn.getpeername()
                 player_id = str(addr)
-                ingredient = random.choice([
-                    'Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
-                    'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe'
-                ])
-                pos = (random.randint(0, config.GRID_WIDTH - 1), random.randint(0, config.GRID_HEIGHT - 1))
-                game_state.add_player(player_id, ingredient, pos)
-            except:
+                if player_id in clients_info:
+                    ingredient = random.choice([
+                        'Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
+                        'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe'
+                    ])
+                    pos = (random.randint(0, config.GRID_WIDTH - 1), random.randint(0, config.GRID_HEIGHT - 1))
+                    game_state.add_player(player_id, ingredient, pos)
+                    print(f"Added player {player_id} to game state")
+            except Exception as e:
+                print(f"Error adding player to game: {e}")
                 continue
         
         timer_thread_active = True
@@ -62,22 +82,40 @@ def restart_game():
         
         broadcast_state()
         
-        print("Game restarted with new state")
+        print("Game started with new state")
+
+def return_to_lobby():
+    """Return all players to the lobby without restarting the game"""
+    global game_started, game_state
+    
+    # Reset game state
+    game_started = False
+    
+    # Reset all players' ready status
+    for player_id in clients_info:
+        clients_info[player_id]["ready"] = False
+    
+    # Create a fresh game state but don't start the timer
+    game_state = GameState()
+    
+    broadcast_state()
+    print("All players returned to lobby, game state reset")
 
 def handle_client(conn, addr):
     print(f"[NEW CONNECTION] {addr} connected.")
     connections.append(conn)
 
-    player_id = str(addr) 
-    ingredient = random.choice([
-        'Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
-        'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe'
-    ])
-    pos = (random.randint(0, config.GRID_WIDTH - 1), random.randint(0, config.GRID_HEIGHT - 1))
-    game_state.add_player(player_id, ingredient, pos)
+    player_id = str(addr)
+    # Default username is Player + last digits of their address
+    default_username = f"Player{addr[1] % 1000}"
+    clients_info[player_id] = {"username": default_username, "ready": False}
+    
+    broadcast_state()
 
     try:
-        conn.sendall(json.dumps(game_state.to_dict()).encode())
+        conn.sendall(json.dumps({"client_id": player_id, **game_state.to_dict(), 
+                                "clients_info": clients_info, 
+                                "game_started": game_started}).encode())
 
         while True:
             data = conn.recv(config.BUFFER_SIZE)
@@ -86,7 +124,30 @@ def handle_client(conn, addr):
 
             msg = json.loads(data.decode())
 
-            if msg.get("action") == "move":
+            if msg.get("action") == "set_username":
+                username = msg.get("username", default_username)
+                clients_info[player_id]["username"] = username
+                print(f"Player {player_id} set username to {username}")
+                broadcast_state()
+                
+            elif msg.get("action") == "toggle_ready":
+                clients_info[player_id]["ready"] = not clients_info[player_id].get("ready", False)
+                ready_status = "ready" if clients_info[player_id]["ready"] else "not ready"
+                print(f"Player {player_id} toggled ready status to {ready_status}")
+                broadcast_state()
+                
+            elif msg.get("action") == "start_game" and not game_started:
+                # Check if all players are ready
+                all_ready = all(client["ready"] for client in clients_info.values())
+                print(f"Start game requested by {player_id}. All players ready: {all_ready}")
+                if all_ready and len(clients_info) > 0:
+                    restart_game()
+            
+            elif msg.get("action") == "return_to_lobby":
+                # print(f"Return to lobby requested by {addr}")
+                return_to_lobby()
+                
+            elif msg.get("action") == "move" and game_started:
                 direction = msg["direction"]
                 game_state.move_player(player_id, direction)
 
@@ -99,20 +160,22 @@ def handle_client(conn, addr):
             elif msg.get("action") == "restart":
                 print(f"Restart requested by {addr}")
                 restart_game()
-                conn.sendall(json.dumps(game_state.to_dict()).encode())
 
     except Exception as e:
         print(f"[ERROR] Connection with {addr} ended unexpectedly: {e}")
     finally:
+        if player_id in clients_info:
+            del clients_info[player_id]
         game_state.remove_player(player_id)
-        connections.remove(conn)
+        if conn in connections:
+            connections.remove(conn)
         broadcast_state()
         conn.close()
         print(f"[DISCONNECT] {addr} disconnected.")
 
 def timer_thread():
     """Update the game timer using a simple countdown approach"""
-    global timer_thread_active
+    global timer_thread_active, game_started
     
     start_time = time.time()
     game_duration = game_state.timer
@@ -144,6 +207,7 @@ def timer_thread():
         # Game over condition
         if remaining <= 0:
             game_state.timer = 0
+            game_started = False
             broadcast_state()
             print(f"Game Over! Final Score: {game_state.score}")
             break
@@ -151,11 +215,8 @@ def timer_thread():
         time.sleep(0.1)  # Small sleep to prevent CPU hogging
 
 def start():
-    global timer_thread_instance
-    # Start the timer thread
-    timer_thread_active = True
-    timer_thread_instance = threading.Thread(target=timer_thread, daemon=True)
-    timer_thread_instance.start()
+    global timer_thread_instance, game_started
+    game_started = False
     
     while True:
         conn, addr = server.accept()

@@ -4,6 +4,7 @@ import json
 import socket
 import threading
 import time
+import random
 from src.network import Network
 from src.shared import config
 import os
@@ -19,21 +20,139 @@ pygame.display.set_caption("We are Cooked")
 clock = pygame.time.Clock()
 
 current_state = None
-game_screen_state = config.GAME_STATE_END_SCREEN
-# game_screen_state = config.GAME_STATE_PLAYING
+game_screen_state = config.GAME_STATE_START_SCREEN
 overlay_start_time = 0
 final_score = 0
+client_id = None
+username = f"Player{random.randint(100, 999)}"
+username_input_active = False
+username_input_text = ""
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) 
 image_path = os.path.join(base_dir, 'assets', 'images', 'end_bg.png')
 
 def format_time(seconds):
     """Convert seconds to MM:SS format"""
-    # Ensure we're working with an integer for display
     seconds = int(seconds)
     minutes = seconds // 60
     seconds = seconds % 60
     return f"{minutes:02d}:{seconds:02d}"
+
+def draw_text_input(rect, text, active):
+    """Draw a text input field with the given text"""
+    color = (100, 100, 200) if active else (70, 70, 70)
+    pygame.draw.rect(screen, color, rect, border_radius=5)
+    pygame.draw.rect(screen, (200, 200, 200), rect, 2, border_radius=5)
+    
+    font = pygame.font.SysFont(None, 32)
+    text_surface = font.render(text, True, (255, 255, 255))
+    text_rect = text_surface.get_rect(midleft=(rect.x + 10, rect.centery))
+    screen.blit(text_surface, text_rect)
+
+def draw_button(rect, text, hover=False):
+    """Draw a button with the given text"""
+    color = (100, 200, 100) if hover else (80, 180, 80)
+    pygame.draw.rect(screen, color, rect, border_radius=10)
+    pygame.draw.rect(screen, (50, 150, 50), rect, 3, border_radius=10)
+    
+    font = pygame.font.SysFont(None, 36)
+    text_surface = font.render(text, True, (255, 255, 255))
+    text_rect = text_surface.get_rect(center=rect.center)
+    screen.blit(text_surface, text_rect)
+    
+    return rect
+
+def draw_start_screen():
+    """Draw the start screen with connected clients and start button"""
+    screen.fill((30, 30, 50))
+    
+    # Draw game title
+    title_font = pygame.font.SysFont(None, 72)
+    title_text = title_font.render("We are Cooked!", True, (255, 220, 100))
+    title_rect = title_text.get_rect(center=(screen_width // 2, screen_height // 6))
+    screen.blit(title_text, title_rect)
+    
+    # Draw username input field
+    username_label_font = pygame.font.SysFont(None, 32)
+    username_label = username_label_font.render("Your Username:", True, (200, 200, 200))
+    screen.blit(username_label, (screen_width // 4, screen_height // 3))
+    
+    username_rect = pygame.Rect(screen_width // 4, screen_height // 3 + 40, 300, 40)
+    draw_text_input(username_rect, username_input_text if username_input_active else username, username_input_active)
+    
+    # Draw connected clients
+    clients_font = pygame.font.SysFont(None, 36)
+    clients_title = clients_font.render("Connected Players:", True, (200, 200, 200))
+    screen.blit(clients_title, (screen_width // 4, screen_height // 2))
+    
+    if current_state and "clients_info" in current_state:
+        y_offset = screen_height // 2 + 40
+        for player_id, info in current_state["clients_info"].items():
+            player_name = info.get("username", "Unknown")
+            ready_status = "✓ Ready" if info.get("ready", False) else "○ Not Ready"
+            
+            # Highlight the current client
+            if player_id == client_id:
+                player_text = f"> {player_name} (You) - {ready_status}"
+                text_color = (255, 255, 100)
+            else:
+                player_text = f"  {player_name} - {ready_status}"
+                text_color = (255, 255, 255)
+                
+            player_font = pygame.font.SysFont(None, 28)
+            player_label = player_font.render(player_text, True, text_color)
+            screen.blit(player_label, (screen_width // 4, y_offset))
+            y_offset += 30
+    
+    # Draw ready button
+    ready_button_width, ready_button_height = 200, 50
+    ready_button_x = (screen_width - ready_button_width) // 4
+    ready_button_y = screen_height * 3 // 4
+    ready_button_rect = pygame.Rect(ready_button_x, ready_button_y, ready_button_width, ready_button_height)
+    
+    # Check if mouse is hovering over button
+    mouse_pos = pygame.mouse.get_pos()
+    ready_button_hover = ready_button_rect.collidepoint(mouse_pos)
+    
+    # Get current ready status
+    is_ready = False
+    if current_state and "clients_info" in current_state and client_id in current_state["clients_info"]:
+        is_ready = current_state["clients_info"][client_id].get("ready", False)
+        # print(f"Current ready status: {is_ready}")
+    
+    ready_text = "Cancel Ready" if is_ready else "Ready Up"
+    draw_button(ready_button_rect, ready_text, ready_button_hover)
+    
+    # Draw start button
+    start_button_width, start_button_height = 200, 50
+    start_button_x = (screen_width - start_button_width) * 3 // 4
+    start_button_y = screen_height * 3 // 4
+    start_button_rect = pygame.Rect(start_button_x, start_button_y, start_button_width, start_button_height)
+    
+    # Check if mouse is hovering over button
+    start_button_hover = start_button_rect.collidepoint(mouse_pos)
+    
+    # Check if all players are ready
+    all_ready = False
+    if current_state and "clients_info" in current_state:
+        all_ready = all(client["ready"] for client in current_state["clients_info"].values())
+    
+    # Draw start button with different color based on readiness
+    if all_ready:
+        draw_button(start_button_rect, "Start Game", start_button_hover)
+    else:
+        # Draw disabled button
+        pygame.draw.rect(screen, (100, 100, 100), start_button_rect, border_radius=10)
+        pygame.draw.rect(screen, (70, 70, 70), start_button_rect, 3, border_radius=10)
+        
+        font = pygame.font.SysFont(None, 36)
+        text_surface = font.render("Start Game", True, (180, 180, 180))
+        text_rect = text_surface.get_rect(center=start_button_rect.center)
+        screen.blit(text_surface, text_rect)
+    
+    pygame.display.flip()
+    
+    return username_rect, ready_button_rect, start_button_rect, all_ready
 
 def draw_end_screen():
     """Draw the end screen with final score and restart button"""
@@ -45,21 +164,10 @@ def draw_end_screen():
         screen.fill((30, 30, 50))
         print("Warning: Could not load end_bg.png, using fallback background")
     
-    # Create a semi-transparent overlay for better text readability
-    # overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
-    # overlay.fill((0, 0, 0, 120))  # Black with 47% opacity
-    # screen.blit(overlay, (0, 0))
-    
-    # Draw game title
-    # title_font = pygame.font.SysFont(None, 72)
-    # title_text = title_font.render("We are Cooked!", True, (255, 220, 100))
-    # title_rect = title_text.get_rect(center=(screen_width // 2, screen_height // 4))
-    # screen.blit(title_text, title_rect)
-    
     # Draw final score
     score_font = pygame.font.SysFont(None, 48)
     score_text = score_font.render(f"Final Score: {final_score}", True, (0, 0, 0))
-    score_rect = score_text.get_rect(center=(screen_width // 2, screen_height // 2 + 150))
+    score_rect = score_text.get_rect(center=(screen_width // 2, screen_height // 2 + 130))
     screen.blit(score_text, score_rect)
     
     # Draw restart button
@@ -70,16 +178,9 @@ def draw_end_screen():
     
     # Check if mouse is hovering over button
     mouse_pos = pygame.mouse.get_pos()
-    button_color = (100, 200, 100) if button_rect.collidepoint(mouse_pos) else (80, 180, 80)
+    button_hover = button_rect.collidepoint(mouse_pos)
     
-    pygame.draw.rect(screen, button_color, button_rect, border_radius=10)
-    pygame.draw.rect(screen, (50, 150, 50), button_rect, 3, border_radius=10)
-    
-    # Draw button text
-    button_font = pygame.font.SysFont(None, 36)
-    button_text = button_font.render("Play Again", True, (255, 255, 255))
-    button_text_rect = button_text.get_rect(center=button_rect.center)
-    screen.blit(button_text, button_text_rect)
+    draw_button(button_rect, "Play Again", button_hover)
     
     pygame.display.flip()
     
@@ -185,32 +286,57 @@ def draw(state):
     pygame.display.flip()
 
 def receiver_thread(net):
-    global current_state
+    global current_state, game_screen_state, client_id
     while True:
         try:
             state = net.receive()
+            # print(f"Received state: game_started={state.get('game_started')}, timer={state.get('timer')}")
             current_state = state
-        except (json.JSONDecodeError, socket.error):
+            
+            if "game_started" in state:
+                if state["game_started"] and game_screen_state == config.GAME_STATE_START_SCREEN:
+                    print("Transitioning to PLAYING state")
+                    game_screen_state = config.GAME_STATE_PLAYING
+                elif not state["game_started"] and game_screen_state == config.GAME_STATE_PLAYING:
+                    print("Transitioning to START_SCREEN state")
+                    game_screen_state = config.GAME_STATE_START_SCREEN
+            
+            if client_id is None and "client_id" in state:
+                client_id = state["client_id"]
+                
+        except (json.JSONDecodeError, socket.error) as e:
+            print(f"Error in receiver thread: {e}")
             break
 
 def main():
     global current_state, game_screen_state, overlay_start_time, final_score
+    global client_id, username, username_input_active, username_input_text
     
     net = Network()
-    print("Waiting for initial state...")
+    # print("Waiting for initial state...")
     current_state = net.receive()
     print(f"Got initial state: {current_state}")
     
-    # Store the client's player ID (using the client's socket address)
-    client_addr = net.get_addr()
-    client_id = str(client_addr)
+    client_id = current_state.get("client_id")
     print(f"Your player ID: {client_id}")
-
+    
+    if "game_started" in current_state:
+        if current_state["game_started"]:
+            game_screen_state = config.GAME_STATE_PLAYING
+        else:
+            game_screen_state = config.GAME_STATE_START_SCREEN
+    
     threading.Thread(target=receiver_thread, args=(net,), daemon=True).start()
     
     last_frame_time = time.time()
     
     restart_button_rect = None
+    username_rect = None
+    ready_button_rect = None
+    start_button_rect = None
+    all_ready = False
+
+    net.send({"action": "set_username", "username": username})
 
     while True:
         current_time = time.time()
@@ -224,16 +350,52 @@ def main():
                 pygame.quit()
                 sys.exit()
             
-            if game_screen_state == config.GAME_STATE_END_SCREEN and event.type == pygame.MOUSEBUTTONDOWN:
+            if game_screen_state == config.GAME_STATE_START_SCREEN:
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    mouse_pos = event.pos
+                    
+                    # Check if username field was clicked
+                    if username_rect and username_rect.collidepoint(mouse_pos):
+                        username_input_active = not username_input_active
+                        if username_input_active:
+                            username_input_text = username
+                    else:
+                        username_input_active = False
+                        
+                    # Check if ready button was clicked
+                    if ready_button_rect and ready_button_rect.collidepoint(mouse_pos):
+                        # print("Ready button clicked, sending toggle_ready action")
+                        net.send({"action": "toggle_ready"})
+                        
+                    # Check if start button was clicked and all players are ready
+                    if start_button_rect and start_button_rect.collidepoint(mouse_pos) and all_ready:
+                        # print("Start button clicked, sending start_game action")
+                        net.send({"action": "start_game"})
+                
+                # Handle text input for username
+                if event.type == pygame.KEYDOWN and username_input_active:
+                    if event.key == pygame.K_RETURN:
+                        username = username_input_text
+                        username_input_active = False
+                        net.send({"action": "set_username", "username": username})
+                    elif event.key == pygame.K_BACKSPACE:
+                        username_input_text = username_input_text[:-1]
+                    else:
+                        if len(username_input_text) < 15:
+                            username_input_text += event.unicode
+            
+            elif game_screen_state == config.GAME_STATE_END_SCREEN and event.type == pygame.MOUSEBUTTONDOWN:
                 if restart_button_rect and restart_button_rect.collidepoint(event.pos):
-                    game_screen_state = config.GAME_STATE_PLAYING
-                    net.send({"action": "restart"})
-                    try:
-                        current_state = net.receive()
-                    except:
-                        print("Error receiving new game state after restart")
+                    # print("Play Again button clicked, sending return_to_lobby action")
+                    game_screen_state = config.GAME_STATE_START_SCREEN
+                    net.send({"action": "return_to_lobby"})
+                    if client_id in current_state.get("clients_info", {}):
+                        current_state["clients_info"][client_id]["ready"] = False
 
-        if game_screen_state == config.GAME_STATE_PLAYING:
+        if game_screen_state == config.GAME_STATE_START_SCREEN:
+            username_rect, ready_button_rect, start_button_rect, all_ready = draw_start_screen()
+            
+        elif game_screen_state == config.GAME_STATE_PLAYING:
             keys = pygame.key.get_pressed()
             if keys[pygame.K_UP]:
                 net.send({"action": "move", "direction": "UP"})
