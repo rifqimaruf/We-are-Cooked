@@ -49,39 +49,73 @@ def broadcast_state():
 def restart_game():
     """Reset the game state and start a new timer thread"""
     global game_state, timer_thread_active, timer_thread_instance, game_started
-    
+
     with restart_lock:
         if timer_thread_instance and timer_thread_instance.is_alive():
             timer_thread_active = False
             timer_thread_instance.join(timeout=1.0)
-        
+
         game_state = GameState()
         game_started = True
         print(f"Setting game_started to {game_started}")
-        
+        # Langkah 1: Hasilkan pesanan terlebih dahulu agar kita tahu bahan yang dibutuhkan
+        # Ini penting dilakukan sebelum menambahkan pemain karena penugasan bahan
+        # akan bergantung pada pesanan yang ada.
+        num_connected_clients = len(clients_info)
+        game_state.generate_orders(num_connected_clients) # Mengirim jumlah klien untuk filter resep
+        print(f"Generated orders: {[o['name'] for o in game_state.orders]}")
+
+        # Langkah 2: Kumpulkan semua bahan yang dibutuhkan oleh pesanan aktif
+        required_ingredients_pool = []
+        for order in game_state.orders:
+            # Ambil bahan dari recipe_manager karena order hanya punya nama & harga
+            # Asumsi recipe_manager punya cara untuk mendapatkan detail resep dari nama
+            # (Kita akan tambahkan ini jika belum ada)
+            recipe_detail = game_state.recipe_manager.check_merge(order['ingredients']) # Ini akan butuh update pada struktur order yang disimpan
+            if recipe_detail:
+                required_ingredients_pool.extend(list(recipe_detail['ingredients']))
+            else:
+                print(f"Warning: Recipe detail not found for order {order['name']}")
+
+        # Jika ada duplikat bahan yang dibutuhkan (misal: 2 onigiri butuh 2 rice), pertahankan duplikatnya.
+        # Kita akan shuffle pool ini untuk penugasan yang lebih adil antar pemain.
+        random.shuffle(required_ingredients_pool)
+        print(f"Required ingredients pool: {required_ingredients_pool}")
+
+        # Daftar semua bahan yang mungkin (untuk pemain yang tidak mendapatkan bahan utama)
+        all_possible_ingredients = [
+            'Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
+            'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe'
+        ]
+
         # Add players to the game state
         for conn in connections:
             try:
                 addr = conn.getpeername()
                 player_id = str(addr)
                 if player_id in clients_info:
-                    ingredient = random.choice([
-                        'Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
-                        'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe'
-                    ])
+                    # Ambil bahan dari pool yang dibutuhkan, jika masih ada
+                    if required_ingredients_pool:
+                        ingredient = required_ingredients_pool.pop(0) # Ambil bahan pertama dari pool
+                    else:
+                        # Jika pool bahan yang dibutuhkan kosong, berikan bahan acak
+                        ingredient = random.choice(all_possible_ingredients)
+
                     pos = (random.randint(0, config.GRID_WIDTH - 1), random.randint(0, config.GRID_HEIGHT - 1))
                     game_state.add_player(player_id, ingredient, pos)
-                    print(f"Added player {player_id} to game state")
+                    print(f"Added player {player_id} as {ingredient} to game state at {pos}")
             except Exception as e:
                 print(f"Error adding player to game: {e}")
                 continue
-        
+
+        # --- Akhir perubahan untuk penugasan bahan yang cerdas ---
+
         timer_thread_active = True
         timer_thread_instance = threading.Thread(target=timer_thread, daemon=True)
         timer_thread_instance.start()
-        
+
         broadcast_state()
-        
+
         print("Game started with new state")
 
 def return_to_lobby():

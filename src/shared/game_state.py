@@ -1,3 +1,6 @@
+import random
+from . import config
+from .recipe_manager import RecipeManager
 from src.shared import config
 from src.shared.recipe_manager import recipe_manager
 
@@ -10,10 +13,13 @@ class PlayerState:
 
 class GameState:
     def __init__(self):
-        self.players = {} 
-        self.orders = [recipe_manager.get_random_order() for _ in range(3)]
+        self.players = {}
+        self.orders = []
         self.score = 0
         self.timer = config.GAME_TIMER_SECONDS
+        self.recipe_manager = RecipeManager()
+        self.clients_info = {} # Untuk melacak status ready klien
+        # self._generate_initial_orders() # Kita akan panggil ini dari server nanti, bukan di init GameState
 
     def add_player(self, player_id, ingredient, pos):
         self.players[player_id] = PlayerState(player_id, ingredient, pos)
@@ -62,9 +68,20 @@ class GameState:
         return None
 
     def to_dict(self):
+        # Pastikan order yang dikirim ke client memiliki semua info yang relevan
+        # Termasuk daftar ingredientsnya.
+        serializable_orders = []
+        for order in self.orders:
+            # Asumsi 'order' di self.orders sekarang sudah menyimpan 'ingredients'
+            serializable_orders.append({
+                "name": order.get("name"),
+                "price": order.get("price"),
+                "ingredients": order.get("ingredients", []) # Pastikan ingredients ikut dikirim
+            })
+
         return {
             "players": {pid: {"ingredient": p.ingredient, "pos": p.pos, "target_pos": p.target_pos} for pid, p in self.players.items()},
-            "orders": self.orders,
+            "orders": serializable_orders,
             "score": self.score,
             "timer": self.timer
         }
@@ -72,3 +89,31 @@ class GameState:
     def remove_player(self, player_id):
         if player_id in self.players:
             del self.players[player_id]
+
+    def generate_orders(self, num_active_players): # Menerima argumen
+        """
+        Menghasilkan pesanan baru berdasarkan jumlah pemain aktif yang diberikan.
+        """
+        if num_active_players == 0:
+            self.orders = []
+            return
+
+        # Dapatkan resep yang jumlah bahannya <= jumlah pemain
+        possible_recipes = self.recipe_manager.get_recipes_by_ingredient_count(max_ingredients=num_active_players)
+
+        if not possible_recipes:
+            print("Warning: No suitable recipes found for current number of players.")
+            self.orders = []
+            return
+
+        # Pilih beberapa pesanan secara acak dari daftar yang difilter
+        # Misalnya, maksimal 3 pesanan
+        num_orders_to_generate = min(3, len(possible_recipes))
+
+        # Kita perlu memastikan 'ingredients' juga disimpan di order
+        selected_orders = random.sample(possible_recipes, num_orders_to_generate)
+
+        # Format ulang pesanan untuk disimpan di game_state.orders
+        self.orders = [{"name": o['name'], "price": o['price'], "ingredients": list(o['ingredients'])} for o in selected_orders]
+        print(f"Generated orders (with ingredients): {self.orders}")
+        

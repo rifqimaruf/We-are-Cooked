@@ -68,6 +68,21 @@ class RecipeManager:
         
         conn.close()
         return {"name": result[0], "price": result[1]} if result else None
+    
+    def get_recipes_by_ingredient_count(self, max_ingredients=None):
+        """
+        Mengembalikan daftar resep yang jumlah bahannya kurang dari atau sama dengan max_ingredients.
+        Jika max_ingredients None, kembalikan semua resep.
+        """
+        if max_ingredients is None:
+            return list(self._cache.values()) # Mengembalikan semua resep
+
+        filtered_recipes = []
+        for recipe_data in self._cache.values():
+            # recipe_data['ingredients'] adalah frozenset dari nama bahan
+            if len(recipe_data['ingredients']) <= max_ingredients:
+                filtered_recipes.append(recipe_data)
+        return filtered_recipes
 
 # Singleton instance untuk diimpor di seluruh proyek
 recipe_manager = RecipeManager()
