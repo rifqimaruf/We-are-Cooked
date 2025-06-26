@@ -216,23 +216,27 @@ def draw(state):
     if client_id and client_id in state["players"]:
         client_ingredient = state["players"][client_id]["ingredient"]
     
-    if client_ingredient:
-        ingredient_bg = pygame.Rect(10, 10, 250, 50)
-        pygame.draw.rect(screen, (50, 50, 50), ingredient_bg)
-        pygame.draw.rect(screen, (100, 100, 100), ingredient_bg, 2)
-        
-        ingredient_title_font = pygame.font.SysFont(None, 18)
-        ingredient_text = ingredient_title_font.render(f"you are:", True, (200, 200, 200))
-        screen.blit(ingredient_text, (20, 18))
-
-        ingredient_font = pygame.font.SysFont(None, 24)
-        ingredient_text = ingredient_font.render(client_ingredient, True, (255, 255, 255))
-        screen.blit(ingredient_text, (20, 35))
-    
     # Draw UI background
     ui_area = pygame.Rect(0, screen_height - ui_height, screen_width, ui_height)
     pygame.draw.rect(screen, (50, 50, 50), ui_area)
     
+    if client_ingredient:
+        ingredient_bg = pygame.Rect(10, 10, 250, 50)
+        pygame.draw.rect(screen, (50, 50, 50), ingredient_bg)
+        pygame.draw.rect(screen, (100, 100, 100), ingredient_bg, 2)
+
+        ingredient_title_font = pygame.font.SysFont(None, 18)
+        ingredient_text = ingredient_title_font.render(f"You are:", True, (200, 200, 200))
+        screen.blit(ingredient_text, (screen_width - 200, screen_height - ui_height + 15))
+
+        ingredient_font = pygame.font.SysFont(None, 28)
+        ingredient_text = ingredient_font.render(client_ingredient, True, (255, 255, 255))
+        screen.blit(ingredient_text, (screen_width - 200, screen_height - ui_height + 30))
+
+        # order_font = pygame.font.SysFont(None, 24)
+        # order_text = order_font.render(f"Orders: {', '.join([order['name'] for order in state['orders'][:2]])}", True, (255, 255, 255))
+        # screen.blit(order_text, (screen_width - 500, screen_height - ui_height + 25))
+
     # Draw score
     score_font = pygame.font.SysFont(None, 28)
     score_text = score_font.render(f"Score: {state['score']}", True, (255, 255, 255))
@@ -257,7 +261,7 @@ def draw(state):
     timer_bar_width = 200
     timer_bar_height = 8
     timer_bar_x = (screen_width // 2) - (timer_bar_width // 2)
-    timer_bar_y = screen_height - ui_height + 35
+    timer_bar_y = screen_height - ui_height + 40
     
     # Background bar (empty)
     pygame.draw.rect(screen, (100, 100, 100), 
@@ -279,9 +283,23 @@ def draw(state):
     
     # Draw orders
     if "orders" in state and state["orders"]:
+        orders_bg = pygame.Rect(10, 10, 250, 75)
+        pygame.draw.rect(screen, (50, 50, 50), orders_bg)
+        pygame.draw.rect(screen, (100, 100, 100), orders_bg, 2)
+        
+        orders_title_font = pygame.font.SysFont(None, 18)
+        orders_text = orders_title_font.render(f"orders:", True, (200, 200, 200))
+        screen.blit(orders_text, (20, 18))
+
         order_font = pygame.font.SysFont(None, 24)
-        order_text = order_font.render(f"Orders: {', '.join([order['name'] for order in state['orders'][:2]])}", True, (255, 255, 255))
-        screen.blit(order_text, (screen_width - 500, screen_height - ui_height + 25))
+        for i, order in enumerate(state["orders"][:2]):
+            order_name = order["name"]
+            order_text = order_font.render(order_name, True, (255, 255, 255))
+            screen.blit(order_text, (20, 35 + i * 25))
+        
+        # order_font = pygame.font.SysFont(None, 24)
+        # order_text = order_font.render(f"Orders: {', '.join([order['name'] for order in state['orders'][:2]])}", True, (255, 255, 255))
+        # screen.blit(order_text, (screen_width - 500, screen_height - ui_height + 25))
     
     pygame.display.flip()
 
