@@ -20,15 +20,24 @@ class GameState:
     def move_player(self, player_id, direction):
         p = self.players[player_id]
         x, y = p.pos
+
+        new_x, new_y = x, y
         if direction == "UP":
-            y = max(0, y - config.PLAYER_SPEED)
+            new_y -= config.PLAYER_SPEED
         elif direction == "DOWN":
-            y = min(config.GRID_HEIGHT - 1, y + config.PLAYER_SPEED)
+            new_y += config.PLAYER_SPEED
         elif direction == "LEFT":
-            x = max(0, x - config.PLAYER_SPEED)
+            new_x -= config.PLAYER_SPEED
         elif direction == "RIGHT":
-            x = min(config.GRID_WIDTH - 1, x + config.PLAYER_SPEED)
-        p.pos = (x, y)
+            new_x += config.PLAYER_SPEED
+            p.pos = (x, y)
+
+        # cek batas maks
+        final_x = max (0, min(new_x, config.GRID_WIDTH - 1))
+        final_y = max (0, min(new_y, config.GRID_HEIGHT -1))
+
+        # perbarui nilai posisi
+        p.pos = (final_x, final_y)
 
     def check_for_merge(self):
         positions = {}
