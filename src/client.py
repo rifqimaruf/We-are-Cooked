@@ -24,6 +24,7 @@ game_screen_state = config.GAME_STATE_START_SCREEN
 overlay_start_time = 0
 final_score = 0
 client_id = None
+interpolated_player_positions = {}
 username = f"Player{random.randint(100, 999)}"
 username_input_active = False
 username_input_text = ""
@@ -196,19 +197,45 @@ def draw(state):
     
     client_id = state.get("client_id")
 
+    # Fungsi bantu untuk interpolasi linier (linear interpolation)
+    def lerp(a, b, t):
+        return a + (b - a) * t
+
     # Draw players
     for player_id, player in state["players"].items():
-        x, y = player["pos"]
-        rect = pygame.Rect(x * tile_size, y * tile_size, tile_size, tile_size)
-        
+        target_x, target_y = player["pos"] # Ini adalah posisi terbaru dari server
+
+        # Dapatkan posisi visual pemain saat ini (yang terakhir digambar)
+        current_visual_x, current_visual_y = interpolated_player_positions.get(player_id, (target_x, target_y))
+
+        # Perbarui posisi visual dengan interpolasi
+        # Kita interpolasi sedikit demi sedikit menuju target
+        # Tentukan kecepatan interpolasi (misalnya 0.2 adalah 20% dari jarak per frame)
+        interpolation_factor = 0.2 # Sesuaikan nilai ini untuk kontrol kecepatan interpolasi
+
+        # Hanya interpolasi jika ada perbedaan signifikan
+        if abs(current_visual_x - target_x) > 0.01 or abs(current_visual_y - target_y) > 0.01:
+            interpolated_x = lerp(current_visual_x, target_x, interpolation_factor)
+            interpolated_y = lerp(current_visual_y, target_y, interpolation_factor)
+        else:
+            interpolated_x, interpolated_y = target_x, target_y # Jika sudah dekat, langsung set ke target
+
+        # Simpan posisi visual yang baru diinterpolasi
+        interpolated_player_positions[player_id] = (interpolated_x, interpolated_y)
+
+        # Hitung rectangle untuk menggambar
+        rect = pygame.Rect(interpolated_x * tile_size, interpolated_y * tile_size, tile_size, tile_size)
+
         if player_id == client_id:
             pygame.draw.rect(screen, (0, 150, 255), rect)
         else:
             pygame.draw.rect(screen, (0, 200, 0), rect)
-            
+
         font = pygame.font.SysFont(None, 24)
         img = font.render(player["ingredient"], True, (0, 0, 0))
-        screen.blit(img, (rect.x, rect.y))
+        # Posisikan teks di tengah rect pemain
+        text_rect = img.get_rect(center=rect.center)
+        screen.blit(img, text_rect)
 
     # Draw current client's ingredient
     client_ingredient = None
@@ -337,7 +364,11 @@ def main():
     
     client_id = current_state.get("client_id")
     print(f"Your player ID: {client_id}")
-    
+
+    # Initialize interpolated positions for existing players
+    for pid, p_info in current_state.get("players", {}).items():
+        interpolated_player_positions[pid] = p_info["pos"]
+
     if "game_started" in current_state:
         if current_state["game_started"]:
             game_screen_state = config.GAME_STATE_PLAYING
@@ -409,6 +440,7 @@ def main():
                     net.send({"action": "return_to_lobby"})
                     if client_id in current_state.get("clients_info", {}):
                         current_state["clients_info"][client_id]["ready"] = False
+                    interpolated_player_positions.clear() # Kosongkan posisi interpolasi saat kembali ke lobby
 
         if game_screen_state == config.GAME_STATE_START_SCREEN:
             username_rect, ready_button_rect, start_button_rect, all_ready = draw_start_screen()
