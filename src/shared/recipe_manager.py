@@ -70,18 +70,18 @@ class RecipeManager:
         return {"name": result[0], "price": result[1]} if result else None
     
     def get_recipes_by_ingredient_count(self, max_ingredients=None):
-        """
-        Mengembalikan daftar resep yang jumlah bahannya kurang dari atau sama dengan max_ingredients.
-        Jika max_ingredients None, kembalikan semua resep.
-        """
         if max_ingredients is None:
-            return list(self._cache.values()) # Mengembalikan semua resep
+            return list(self._recipes_cache.values())
 
         filtered_recipes = []
-        for recipe_data in self._cache.values():
-            # recipe_data['ingredients'] adalah frozenset dari nama bahan
-            if len(recipe_data['ingredients']) <= max_ingredients:
-                filtered_recipes.append(recipe_data)
+        # _recipes_cache berisi {frozenset_bahan: {id, name, price, level}}
+        # Jadi kita perlu mengakses kembali frozenset_bahan untuk mendapatkan length
+        for ingredients_set, recipe_data in self._recipes_cache.items(): # <--- SUDAH DIUBAH
+            if len(ingredients_set) <= max_ingredients: # <--- MENGGUNAKAN ingredients_set
+                # Tambahkan 'ingredients' ke recipe_data agar bisa digunakan di GameState
+                recipe_data_with_ingredients = recipe_data.copy()
+                recipe_data_with_ingredients['ingredients'] = ingredients_set
+                filtered_recipes.append(recipe_data_with_ingredients)
         return filtered_recipes
 
 # Singleton instance untuk diimpor di seluruh proyek

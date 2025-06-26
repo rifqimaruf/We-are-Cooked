@@ -1,8 +1,6 @@
 import random
 from . import config
-from .recipe_manager import RecipeManager
-from src.shared import config
-from src.shared.recipe_manager import recipe_manager
+from .recipe_manager import RecipeManager 
 
 class PlayerState:
     def __init__(self, player_id, ingredient, pos):
@@ -53,19 +51,110 @@ class GameState:
         p.target_pos = (final_x, final_y) # Update target_pos juga
 
     def check_for_merge(self):
-        positions = {}
+        positions = {} # { (x,y): [player1_obj, player2_obj, ...] }
         for p in self.players.values():
-            positions.setdefault(p.pos, []).append(p)
+            grid_x, grid_y = int(p.pos[0]), int(p.pos[1])
+            positions.setdefault((grid_x, grid_y), []).append(p)
 
-        for pos, plist in positions.items():
-            if len(plist) > 1:
-                ingredients = [p.ingredient for p in plist]
-                result = recipe_manager.check_merge(ingredients)
-                if result:
-                    self.score += result["price"]
-                    print(f"Fusion at {pos}: {result['name']} served! +{result['price']} cuan")
-                    return {"fusion": result, "pos": pos}
-        return None
+        merged_results = []
+        players_to_remove = set() # Menggunakan set untuk menghindari duplikat player_id
+
+        for pos_key, plist in positions.items(): # pos_key adalah (grid_x, grid_y)
+            if len(plist) > 1: # Hanya periksa jika lebih dari satu pemain di petak yang sama
+                available_players_on_tile = {p.player_id: p for p in plist}
+                for order_index, order in enumerate(list(self.orders)): 
+                    required_order_ingredients = list(order['ingredients']) # Ambil list bahan yang dibutuhkan order
+
+                    # List untuk melacak player_id yang berpotensi terlibat dalam fusi ini
+                    potential_merge_player_ids = []
+                    potential_merge_ingredient_names = []
+
+                    # Buat salinan bahan yang tersedia dari pemain di tile untuk percobaan ini
+                    # {ingredient_name: [player_id1, player_id2, ...]}
+                    temp_available_ingredients = {}
+                    for p_id, p_obj in available_players_on_tile.items():
+                        temp_available_ingredients.setdefault(p_obj.ingredient, []).append(p_id)
+
+                    all_ingredients_found_for_order = True
+
+                    # Coba penuhi setiap bahan yang dibutuhkan oleh pesanan ini
+                    for required_ing in required_order_ingredients:
+                        if required_ing in temp_available_ingredients and temp_available_ingredients[required_ing]:
+                            # Ambil satu pemain dengan bahan ini
+                            p_id_for_this_ing = temp_available_ingredients[required_ing].pop(0)
+                            potential_merge_player_ids.append(p_id_for_this_ing)
+                            potential_merge_ingredient_names.append(required_ing)
+                        else:
+                            all_ingredients_found_for_order = False
+                            break # Bahan tidak ditemukan untuk pesanan ini
+
+                    # Jika semua bahan untuk pesanan ini ditemukan
+                    if all_ingredients_found_for_order and \
+                       len(potential_merge_ingredient_names) == len(required_order_ingredients):
+
+                        # Verifikasi ulang fusi menggunakan recipe_manager dengan frozenset
+                        # (penting karena check_merge mengambil frozenset)
+                        result_recipe = self.recipe_manager.check_merge(frozenset(potential_merge_ingredient_names))
+
+                        if result_recipe and result_recipe['name'] == order['name']:
+                            self.score += result_recipe["price"]
+                            merged_results.append({
+                                "fusion": result_recipe,
+                                "pos": pos_key,
+                                "players_involved": potential_merge_player_ids
+                            })
+                            print(f"Fusion at {pos_key}: {result_recipe['name']} served! +{result_recipe['price']} cuan")
+
+                            # Tambahkan pemain yang terlibat ke set untuk dihapus nanti
+                            players_to_remove.update(potential_merge_player_ids)
+
+                            # Hapus pesanan yang sudah terpenuhi dari daftar pesanan aktif
+                            # Gunakan pop(order_index) karena kita iterasi list(self.orders)
+                            order['fulfilled'] = True # Hapus dari list original
+
+                            print(f"Order '{order['name']}' fulfilled. Remaining orders: {[o['name'] for o in self.orders]}")
+
+                            # Perbarui available_players_on_tile agar pemain yang sudah berfusi tidak digunakan lagi
+                            for p_id in potential_merge_player_ids:
+                                if p_id in available_players_on_tile:
+                                    del available_players_on_tile[p_id]
+
+                            # Jika semua pesanan terpenuhi, buat pesanan baru
+                            if not self.orders:
+                                self.generate_orders(len(self.players))
+                                print("All orders fulfilled, generating new ones.")
+
+                            break # Keluar dari loop for order in self.orders
+
+        # Hapus pemain yang berfusi dan respawn mereka
+        for p_id in players_to_remove:
+            if p_id in self.players: # Pastikan pemain belum dihapus
+                self.remove_player(p_id)
+
+                # Respawn pemain dengan bahan baru dan posisi acak
+                all_ingredients = ['Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
+                                   'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe']
+                new_ingredient = random.choice(all_ingredients)
+
+                # Cari posisi kosong untuk respawn
+                existing_positions = [p.pos for p in self.players.values()]
+                new_pos = None
+                attempts = 0
+                while new_pos is None and attempts < 100: # Batasi percobaan
+                    temp_x = random.randint(0, config.GRID_WIDTH - 1)
+                    temp_y = random.randint(0, config.GRID_HEIGHT - 1)
+                    # Cek apakah posisi (int,int) kosong
+                    if (temp_x, temp_y) not in existing_positions:
+                        new_pos = (float(temp_x), float(temp_y)) # Simpan sebagai float
+                    attempts += 1
+
+                if new_pos is None: # Jika tidak menemukan posisi kosong setelah banyak percobaan
+                     new_pos = (random.randint(0, config.GRID_WIDTH - 1), random.randint(0, config.GRID_HEIGHT - 1)) # Fallback ke posisi acak
+
+                self.add_player(p_id, new_ingredient, new_pos)
+                print(f"Player {p_id} respawned as {new_ingredient} at {new_pos}")
+
+        return merged_results if merged_results else None
 
     def to_dict(self):
         # Pastikan order yang dikirim ke client memiliki semua info yang relevan
