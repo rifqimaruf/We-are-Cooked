@@ -1,30 +1,33 @@
 import sqlite3
 import os
 
+# src/shared/recipe_manager.py
 class RecipeManager:
-    _instance = None
+    _instance = None # Ini harus di luar __init__
+    _initialized = False # Tambahkan flag inisialisasi di level kelas
 
     def __new__(cls, *args, **kwargs):
-        if not cls._instance:
+        if cls._instance is None:
             cls._instance = super(RecipeManager, cls).__new__(cls)
         return cls._instance
 
     def __init__(self, db_path=None):
-        if hasattr(self, '_initialized'):
-            return
+        # Penting: Hanya inisialisasi jika belum diinisialisasi untuk instance singleton
+        if not self._initialized: 
+            if db_path is None:
+                base_dir = os.path.dirname(__file__)
+                db_path = os.path.join(base_dir, 'recipes.db')
 
-        if db_path is None:
-            base_dir = os.path.dirname(__file__)
-            db_path = os.path.join(base_dir, 'recipes.db')
+            if not os.path.exists(db_path):
+                raise FileNotFoundError(f"Database tidak ditemukan di {db_path}")
 
-        if not os.path.exists(db_path):
-            raise FileNotFoundError(f"Database tidak ditemukan di {db_path}")
-
-        self.db_path = db_path
-        self._recipes_cache = self._load_recipes_to_cache()
-        self._initialized = True
-        print("RecipeManager initialized and recipes cached.")
-
+            self.db_path = db_path
+            self._recipes_cache = self._load_recipes_to_cache()
+            RecipeManager._initialized = True # Set flag inisialisasi di kelas
+            print("RecipeManager initialized and recipes cached.")
+        else:
+            print("RecipeManager already initialized. Skipping __init__.") # Debugging
+            
     def _load_recipes_to_cache(self):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()

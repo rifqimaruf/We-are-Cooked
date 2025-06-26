@@ -211,7 +211,7 @@ def draw(state):
         # Perbarui posisi visual dengan interpolasi
         # Kita interpolasi sedikit demi sedikit menuju target
         # Tentukan kecepatan interpolasi (misalnya 0.2 adalah 20% dari jarak per frame)
-        interpolation_factor = 0.2 # Sesuaikan nilai ini untuk kontrol kecepatan interpolasi
+        interpolation_factor = 0.5 # Sesuaikan nilai ini untuk kontrol kecepatan interpolasi
 
         # Hanya interpolasi jika ada perbedaan signifikan
         if abs(current_visual_x - target_x) > 0.01 or abs(current_visual_y - target_y) > 0.01:
