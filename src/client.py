@@ -89,7 +89,7 @@ def draw_start_screen():
         y_offset = screen_height // 2 + 40
         for player_id, info in current_state["clients_info"].items():
             player_name = info.get("username", "Unknown")
-            ready_status = "✓ Ready" if info.get("ready", False) else "○ Not Ready"
+            ready_status = "Ready" if info.get("ready", False) else "Not Ready"
             
             # Highlight the current client
             if player_id == client_id:
@@ -296,10 +296,16 @@ def draw(state):
             order_name = order["name"]
             order_text = order_font.render(order_name, True, (255, 255, 255))
             screen.blit(order_text, (20, 35 + i * 25))
+    
+    # Draw single player mode indicator if only one player
+    if len(state["players"]) == 1:
+        single_player_bg = pygame.Rect(screen_width - 400, 10, 380, 40)
+        pygame.draw.rect(screen, (50, 50, 100), single_player_bg, border_radius=5)
+        pygame.draw.rect(screen, (100, 100, 200), single_player_bg, 2, border_radius=5)
         
-        # order_font = pygame.font.SysFont(None, 24)
-        # order_text = order_font.render(f"Orders: {', '.join([order['name'] for order in state['orders'][:2]])}", True, (255, 255, 255))
-        # screen.blit(order_text, (screen_width - 500, screen_height - ui_height + 25))
+        single_player_font = pygame.font.SysFont(None, 24)
+        single_player_text = single_player_font.render("Single Player Mode: Hit bottom to merge!", True, (255, 200, 100))
+        screen.blit(single_player_text, (screen_width - 390, 20))
     
     pygame.display.flip()
 
