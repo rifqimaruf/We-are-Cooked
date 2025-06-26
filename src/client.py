@@ -6,6 +6,7 @@ import threading
 import time
 from src.network import Network
 from src.shared import config
+import os
 
 pygame.init()
 
@@ -23,6 +24,9 @@ game_screen_state = config.GAME_STATE_END_SCREEN
 overlay_start_time = 0
 final_score = 0
 
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) 
+image_path = os.path.join(base_dir, 'assets', 'images', 'end_bg.png')
+
 def format_time(seconds):
     """Convert seconds to MM:SS format"""
     # Ensure we're working with an integer for display
@@ -34,7 +38,7 @@ def format_time(seconds):
 def draw_end_screen():
     """Draw the end screen with final score and restart button"""
     try:
-        bg_image = pygame.image.load("/home/reivertt/Repositories/We-are-Cooked/assets/images/end_bg.png")
+        bg_image = pygame.image.load(image_path)
         bg_image = pygame.transform.scale(bg_image, (screen_width, screen_height))
         screen.blit(bg_image, (0, 0))
     except pygame.error:
