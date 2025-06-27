@@ -1,7 +1,7 @@
 import random
 import threading
 import time
-from . import config
+from . import config # Pastikan ini diimpor
 from .recipe_manager import RecipeManager
 
 class PlayerState:
@@ -22,6 +22,11 @@ class GameState:
         self._lock = threading.Lock()
         self._fusion_event_queue = []
         self._visual_events = []
+        
+        # --- PENAMBAHAN KODE BARU DI SINI ---
+        self.fusion_stations = []  # List of (x, y) tuples for top-left corner of 2x2 fusion stations
+        self.enter_station = None  # (x, y) tuple for top-left corner of the 2x2 enter station
+        # --- AKHIR PENAMBAHAN ---
 
     def add_player(self, player_id, ingredient, pos):
         with self._lock:
@@ -52,6 +57,57 @@ class GameState:
             p.pos = (final_x, final_y)
             p.target_pos = (final_x, final_y)
 
+    # --- PENAMBAHAN KODE BARU DI SINI ---
+    def _is_player_on_station(self, player_pos, station_top_left):
+        px, py = int(player_pos[0]), int(player_pos[1])
+        sx, sy = station_top_left
+        # Cek apakah pemain berada di dalam area 2x2 stasiun
+        return sx <= px < sx + config.STATION_SIZE and sy <= py < sy + config.STATION_SIZE
+
+    def _get_random_station_pos(self, existing_positions):
+        """Mencari posisi 2x2 acak yang tidak tumpang tindih."""
+        while True:
+            # Pastikan stasiun tidak keluar dari batas grid
+            x = random.randint(0, config.GRID_WIDTH - config.STATION_SIZE)
+            y = random.randint(0, config.GRID_HEIGHT - config.STATION_SIZE)
+            new_pos = (x, y)
+            is_overlapping = False
+            # Cek tumpang tindih dengan stasiun lain
+            for ex_x, ex_y in existing_positions:
+                # Periksa tumpang tindih area 2x2
+                if not (x + config.STATION_SIZE <= ex_x or x >= ex_x + config.STATION_SIZE or \
+                        y + config.STATION_SIZE <= ex_y or y >= ex_y + config.STATION_SIZE):
+                    is_overlapping = True
+                    break
+            if not is_overlapping:
+                return new_pos
+
+    def initialize_stations(self):
+        with self._lock:
+            self.fusion_stations = []
+            existing_station_positions = []
+
+            # Generate 2 fusion stations
+            for _ in range(2):
+                pos = self._get_random_station_pos(existing_station_positions)
+                self.fusion_stations.append(pos)
+                existing_station_positions.append(pos)
+            
+            # Generate 1 enter station
+            pos = self._get_random_station_pos(existing_station_positions)
+            self.enter_station = pos
+            existing_station_positions.append(pos)
+            
+            print(f"Stations initialized: Fusion={self.fusion_stations}, Enter={self.enter_station}")
+
+    def can_player_change_ingredient(self, player_id):
+        with self._lock:
+            p = self.players.get(player_id)
+            if not p or not self.enter_station:
+                return False
+            return self._is_player_on_station(p.pos, self.enter_station)
+    # --- AKHIR PENAMBAHAN ---
+
     def check_for_merge(self):
         with self._lock:
             positions_on_grid = {}
@@ -59,7 +115,23 @@ class GameState:
                 grid_x, grid_y = int(p.pos[0]), int(p.pos[1])
                 positions_on_grid.setdefault((grid_x, grid_y), []).append(p)
             temp_players_processed_in_merge_cycle = set() 
+            
+            # --- MODIFIKASI KODE YANG SUDAH ADA DI SINI ---
+            # Hanya cek fusi jika ada stasiun fusi yang terdefinisi
+            if not self.fusion_stations:
+                return False # Tidak ada stasiun fusi, tidak ada fusi yang bisa terjadi
+
             for pos_key, plist in positions_on_grid.items():
+                # Cek apakah posisi pos_key berada di dalam salah satu fusion_stations
+                is_on_fusion_station = False
+                for station_pos in self.fusion_stations:
+                    if self._is_player_on_station(pos_key, station_pos):
+                        is_on_fusion_station = True
+                        break
+                
+                if not is_on_fusion_station:
+                    continue # Abaikan fusi jika tidak di stasiun fusi
+
                 if len(plist) > 1:
                     current_players_on_tile_available = {p.player_id: p for p in plist if p.player_id not in temp_players_processed_in_merge_cycle}
                     if len(current_players_on_tile_available) < 2:
@@ -117,6 +189,8 @@ class GameState:
                         order_obj['fulfilled'] = True
                         break
                 print(f"Order '{order_name_fulfilled}' fulfilled.")
+                # Tambahkan visual event untuk fusi
+                self._visual_events.append({"type": "recipe_fusion", "data": {"pos": pos, "recipe_name": recipe['name']}}) # Ini penting untuk SFX di klien
             self.orders = [order for order in self.orders if not order.get('fulfilled', False)]
             if not self.orders and len(self.players) > 0:
                 self.generate_orders(len(self.players))
@@ -138,12 +212,22 @@ class GameState:
             timer_copy = self.timer
             visual_events_copy = list(self._visual_events)
             self._visual_events.clear()
+            
+            # --- PENAMBAHAN KODE BARU DI SINI ---
+            fusion_stations_copy = list(self.fusion_stations)
+            enter_station_copy = self.enter_station
+            # --- AKHIR PENAMBAHAN ---
+
         return {
             "players": players_copy,
             "orders": serializable_orders_copy,
             "score": score_copy,
             "timer": timer_copy,
-            "visual_events": visual_events_copy
+            "visual_events": visual_events_copy,
+            # --- PENAMBAHAN KODE BARU DI SINI ---
+            "fusion_stations": fusion_stations_copy,
+            "enter_station": enter_station_copy
+            # --- AKHIR PENAMBAHAN ---
         }
 
     def generate_orders(self, num_active_players):

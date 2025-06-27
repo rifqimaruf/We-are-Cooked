@@ -1,5 +1,5 @@
 import pygame
-from src.shared import config
+from src.shared import config # Pastikan ini diimpor
 
 class Renderer:
     def __init__(self, screen, asset_manager):
@@ -33,6 +33,10 @@ class Renderer:
         if not state_data:
             return
 
+        # --- PENAMBAHAN KODE BARU DI SINI ---
+        self._draw_stations(state_data)
+        # --- AKHIR PENAMBAHAN ---
+
         for player_id, player in state_data["players"].items():
             self._draw_player(player_id, player, game_manager.client_id)
         
@@ -47,6 +51,38 @@ class Renderer:
             "Restart", 
             (restart_button_width, restart_button_height)
         )
+
+    # --- PENAMBAHAN KODE BARU DI SINI ---
+    def _draw_stations(self, state_data):
+        # Draw Fusion Stations
+        fusion_stations = state_data.get("fusion_stations", [])
+        for i, (sx, sy) in enumerate(fusion_stations):
+            for row in range(config.STATION_SIZE):
+                for col in range(config.STATION_SIZE):
+                    rect = pygame.Rect((sx + col) * self.tile_size, (sy + row) * self.tile_size, self.tile_size, self.tile_size)
+                    pygame.draw.rect(self.screen, (255, 150, 150, 100), rect) # Warna merah muda transparan
+                    pygame.draw.rect(self.screen, (200, 0, 0), rect, 2) # Border merah
+
+            font = self.assets.get_font('default_18')
+            text_surface = font.render(f"Fusion {i+1}", True, (50, 50, 50))
+            text_rect = text_surface.get_rect(topleft=(sx * self.tile_size + 5, sy * self.tile_size + 5))
+            self.screen.blit(text_surface, text_rect)
+
+        # Draw Enter Station
+        enter_station = state_data.get("enter_station")
+        if enter_station:
+            sx, sy = enter_station
+            for row in range(config.STATION_SIZE):
+                for col in range(config.STATION_SIZE):
+                    rect = pygame.Rect((sx + col) * self.tile_size, (sy + row) * self.tile_size, self.tile_size, self.tile_size)
+                    pygame.draw.rect(self.screen, (150, 255, 150, 100), rect) # Warna hijau muda transparan
+                    pygame.draw.rect(self.screen, (0, 200, 0), rect, 2) # Border hijau
+            
+            font = self.assets.get_font('default_18')
+            text_surface = font.render("Enter", True, (50, 50, 50))
+            text_rect = text_surface.get_rect(topleft=(sx * self.tile_size + 5, sy * self.tile_size + 5))
+            self.screen.blit(text_surface, text_rect)
+    # --- AKHIR PENAMBAHAN ---
 
     def _draw_player(self, player_id, player_data, local_client_id):
         target_x, target_y = player_data["pos"]

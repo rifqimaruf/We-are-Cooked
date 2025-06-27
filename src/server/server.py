@@ -59,9 +59,8 @@ def create_and_broadcast_state():
     state_dict = game_state.to_dict()
     state_dict["clients_info"] = clients_info
     state_dict["game_started"] = game_started
-    state_dict["visual_events"] = {"game_events": [{"id": e.id, "type": e.event_type, "data": e.data} for e in game_events[-10:]]}
+    state_dict["visual_effects"] = {"game_events": [{"id": e.id, "type": e.event_type, "data": e.data} for e in game_events[-10:]]} # Perbaikan nama key
 
-    # Perbaikan: gunakan copy.deepcopy agar state_dict_with_id benar-benar terpisah untuk setiap client
     encoded_datas = {}
     for player_id in connections.keys():
         state_dict_with_id = copy.deepcopy(state_dict)
@@ -110,6 +109,10 @@ def restart_game():
     game_started = True
     game_events = []
     print(f"Restarting game: game_started set to {game_started}") 
+
+    # --- PENAMBAHAN KODE BARU DI SINI ---
+    game_state.initialize_stations() # Inisialisasi posisi stasiun
+    # --- AKHIR PENAMBAHAN ---
 
     num_players_connected = len(clients_info)
     game_state.generate_orders(num_players_connected) 
@@ -235,15 +238,21 @@ def handle_client(conn: socket.socket, addr: Any):
                                 restart_game()
                                 continue
                             elif action == "change_ingredient":
-                                all_possible_ingredients = ['Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
-                                    'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe']
-                                with game_state._lock:
-                                    player = game_state.players.get(player_id)
-                                    if player:
-                                        old_ing = player.ingredient
-                                        new_ing = random.choice([i for i in all_possible_ingredients if i != old_ing])
-                                        player.ingredient = new_ing
-                                        print(f"Player {player_id} changed ingredient from {old_ing} to {new_ing}")
+                                # --- MODIFIKASI KODE YANG SUDAH ADA DI SINI ---
+                                if game_state.can_player_change_ingredient(player_id):
+                                    all_possible_ingredients = ['Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
+                                        'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe']
+                                    with game_state._lock:
+                                        player = game_state.players.get(player_id)
+                                        if player:
+                                            old_ing = player.ingredient
+                                            new_ing = random.choice([i for i in all_possible_ingredients if i != old_ing])
+                                            player.ingredient = new_ing
+                                            print(f"Player {player_id} changed ingredient from {old_ing} to {new_ing} at Enter Station.")
+                                            add_game_event("ingredient_change", {"player_id": player_id, "old_ingredient": old_ing, "new_ingredient": new_ing}) # Opsional: event visual
+                                else:
+                                    print(f"Player {player_id} tried to change ingredient but not on Enter Station.")
+                                # --- AKHIR MODIFIKASI ---
             except socket.timeout:
                 pass 
             except (json.JSONDecodeError, struct.error) as e:
@@ -277,20 +286,20 @@ def game_timer_thread():
         fusion_happened = False
         if current_time - last_merge_check_time >= MERGE_CHECK_INTERVAL:
             # Debug sebelum fusion
-            print("[DEBUG] Players before fusion:", list(game_state.players.keys()))
+            # print("[DEBUG] Players before fusion:", list(game_state.players.keys())) # Komen atau hapus ini untuk produksi
             game_state.check_for_merge()
             game_state.process_fusion_events()
-            print("[DEBUG] Players after fusion:", list(game_state.players.keys()))
+            # print("[DEBUG] Players after fusion:", list(game_state.players.keys())) # Komen atau hapus ini untuk produksi
             last_merge_check_time = current_time
             fusion_happened = True
             # Segera broadcast state setelah fusion agar client tidak freeze
-            print("[DEBUG] Players before broadcast:", list(game_state.players.keys()))
+            # print("[DEBUG] Players before broadcast:", list(game_state.players.keys())) # Komen atau hapus ini untuk produksi
             create_and_broadcast_state()
             last_broadcast_time = current_time
 
         # Broadcast state secara periodik jika tidak ada fusion
         if not fusion_happened and current_time - last_broadcast_time >= BROADCAST_INTERVAL:
-            print("[DEBUG] Periodic broadcast. Players:", list(game_state.players.keys()))
+            # print("[DEBUG] Periodic broadcast. Players:", list(game_state.players.keys())) # Komen atau hapus ini untuk produksi
             create_and_broadcast_state()
             last_broadcast_time = current_time
 
