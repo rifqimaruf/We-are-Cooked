@@ -12,12 +12,7 @@ ingredients_data = [
 ]
 
 recipes_data = [
-    {'name': 'Sashimi Salmon', 'price': 10000, 'level': 1, 'ingredients': ['Salmon']},
-    {'name': 'Sashimi Tuna', 'price': 12000, 'level': 1, 'ingredients': ['Tuna']},
-    {'name': 'Kani Stick', 'price': 9000, 'level': 1, 'ingredients': ['Crab Meat']},
-    {'name': 'Unagi Slice', 'price': 8000, 'level': 1, 'ingredients': ['Eel']},
-    {'name': 'Boiled Shrimp', 'price': 13000, 'level': 1, 'ingredients': ['Shrimp']},
-
+    
     {'name': 'Salmon Nigiri', 'price': 25000, 'level': 2, 'ingredients': ['Salmon', 'Rice']},
     {'name': 'Tuna Nigiri', 'price': 28000, 'level': 2, 'ingredients': ['Tuna', 'Rice']},
     {'name': 'Ebi Nigiri', 'price': 30000, 'level': 2, 'ingredients': ['Shrimp', 'Rice']},

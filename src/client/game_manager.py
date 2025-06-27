@@ -11,9 +11,15 @@ class GameManager:
         self.is_disconnected = False
 
     def update_state(self, new_state):
-        if self.client_id is None and "client_id" in new_state:
+        # Selalu update client_id jika ada di state baru
+        if "client_id" in new_state:
+            if self.client_id != new_state["client_id"]:
+                print(f"[DEBUG] client_id berubah: {self.client_id} -> {new_state['client_id']}")
             self.client_id = new_state["client_id"]
         self.current_state = new_state
+        # Debug: pastikan client_id selalu ada di players
+        if self.current_state and self.client_id not in self.current_state.get("players", {}):
+            print(f"[WARNING] client_id {self.client_id} tidak ditemukan di state['players']! Mungkin sedang merge atau ada bug.")
 
     def check_state_transitions(self, asset_manager):
         if not self.current_state:

@@ -6,6 +6,7 @@ import time
 import signal
 import struct
 from typing import Dict, Any
+import copy
 
 from src.shared.game_state import GameState
 from src.shared import config
@@ -60,14 +61,19 @@ def create_and_broadcast_state():
     state_dict["game_started"] = game_started
     state_dict["visual_events"] = {"game_events": [{"id": e.id, "type": e.event_type, "data": e.data} for e in game_events[-10:]]}
 
-    encoded_data = json.dumps(state_dict).encode('utf-8')
-    header = struct.pack('>I', len(encoded_data))
-    message_to_send = header + encoded_data
+    # Perbaikan: gunakan copy.deepcopy agar state_dict_with_id benar-benar terpisah untuk setiap client
+    encoded_datas = {}
+    for player_id in connections.keys():
+        state_dict_with_id = copy.deepcopy(state_dict)
+        state_dict_with_id["client_id"] = player_id
+        encoded_data = json.dumps(state_dict_with_id).encode('utf-8')
+        header = struct.pack('>I', len(encoded_data))
+        encoded_datas[player_id] = header + encoded_data
 
     disconnected_players = []
     for player_id, conn in list(connections.items()):
         try:
-            conn.sendall(message_to_send)
+            conn.sendall(encoded_datas[player_id])
         except (socket.error, BrokenPipeError, OSError) as e:
             print(f"Client {player_id} detected as disconnected during broadcast: {e}")
             disconnected_players.append(player_id)
@@ -228,6 +234,16 @@ def handle_client(conn: socket.socket, addr: Any):
                                 print(f"Client {player_id} sent restart from in-game. game_started: {game_started}")
                                 restart_game()
                                 continue
+                            elif action == "change_ingredient":
+                                all_possible_ingredients = ['Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
+                                    'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe']
+                                with game_state._lock:
+                                    player = game_state.players.get(player_id)
+                                    if player:
+                                        old_ing = player.ingredient
+                                        new_ing = random.choice([i for i in all_possible_ingredients if i != old_ing])
+                                        player.ingredient = new_ing
+                                        print(f"Player {player_id} changed ingredient from {old_ing} to {new_ing}")
             except socket.timeout:
                 pass 
             except (json.JSONDecodeError, struct.error) as e:
@@ -258,12 +274,23 @@ def game_timer_thread():
         remaining = max(0, end_time - current_time)
         game_state.timer = int(remaining)
 
+        fusion_happened = False
         if current_time - last_merge_check_time >= MERGE_CHECK_INTERVAL:
+            # Debug sebelum fusion
+            print("[DEBUG] Players before fusion:", list(game_state.players.keys()))
             game_state.check_for_merge()
-            game_state.process_fusion_events() 
+            game_state.process_fusion_events()
+            print("[DEBUG] Players after fusion:", list(game_state.players.keys()))
             last_merge_check_time = current_time
-        
-        if current_time - last_broadcast_time >= BROADCAST_INTERVAL:
+            fusion_happened = True
+            # Segera broadcast state setelah fusion agar client tidak freeze
+            print("[DEBUG] Players before broadcast:", list(game_state.players.keys()))
+            create_and_broadcast_state()
+            last_broadcast_time = current_time
+
+        # Broadcast state secara periodik jika tidak ada fusion
+        if not fusion_happened and current_time - last_broadcast_time >= BROADCAST_INTERVAL:
+            print("[DEBUG] Periodic broadcast. Players:", list(game_state.players.keys()))
             create_and_broadcast_state()
             last_broadcast_time = current_time
 

@@ -104,8 +104,6 @@ class GameState:
         with self._lock:
             events_to_process = list(self._fusion_event_queue)
             self._fusion_event_queue.clear()
-            all_players_for_ingredient_change_data = []
-            self.orders = [order for order in self.orders if not order.get('fulfilled', False)]
             for event in events_to_process:
                 recipe = event['recipe']
                 pos = event['pos']
@@ -113,28 +111,7 @@ class GameState:
                 order_name_fulfilled = event['order_name_fulfilled']
                 self.score += recipe["price"]
                 print(f"Processing Fusion: {recipe['name']} served! +{recipe['price']} cuan at {pos}")
-                players_for_ingredient_change_local = []
-                players_removed_this_event = set()
-                all_ingredients = ['Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
-                'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe']
-                for i, p_id in enumerate(players_involved):
-                    if p_id in self.players and p_id not in players_removed_this_event:
-                        self.remove_player(p_id)
-                        players_removed_this_event.add(p_id)
-                        new_ingredient = random.choice(all_ingredients)
-                        players_for_ingredient_change_local.append({
-                            "player_id": p_id,
-                            "new_ingredient": new_ingredient,
-                            "pos": pos,
-                            "delay_factor": i
-                        })
-                        print(f"Prepared ingredient change for Player {p_id} as {new_ingredient} at {pos} with delay factor {i}")
-                self._visual_events.append({
-                    "type": "ingredient_change_sequence",
-                    "changes": players_for_ingredient_change_local,
-                    "start_time": time.time()
-                })
-                all_players_for_ingredient_change_data.extend(players_for_ingredient_change_local)
+                # Tidak perlu hapus/tambah player, tidak perlu ubah ingredient
                 for order_obj in self.orders:
                     if order_obj['name'] == order_name_fulfilled:
                         order_obj['fulfilled'] = True
@@ -144,8 +121,6 @@ class GameState:
             if not self.orders and len(self.players) > 0:
                 self.generate_orders(len(self.players))
                 print("All orders fulfilled, generating new ones.")
-            for change_data in all_players_for_ingredient_change_data:
-                self.add_player(change_data["player_id"], change_data["new_ingredient"], change_data["pos"])
 
     def to_dict(self):
         with self._lock:
