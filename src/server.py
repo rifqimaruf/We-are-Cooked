@@ -204,7 +204,7 @@ def handle_client(conn, addr):
 
             elif msg.get("action") == "start_game" and not game_started:
                 all_ready = all(client["ready"] for client in clients_info.values())
-                print(f"Start game requested by {player_id}. All players ready: {all_ready}")
+                print(f"Start game requested by {player_id}. All players ready: {all_ready}")                
                 if all_ready and len(clients_info) > 0:
                     restart_game()
 
