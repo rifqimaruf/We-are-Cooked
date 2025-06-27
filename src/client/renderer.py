@@ -19,36 +19,63 @@ class Renderer:
         state = game_manager.game_screen_state
         if game_manager.is_disconnected:
             self.draw_disconnected_screen()
-        elif state == config.GAME_STATE_START_SCREEN: self.draw_start_screen(game_manager)
-        elif state == config.GAME_STATE_PLAYING: self.draw_game_screen(game_manager)
-        elif state == config.GAME_STATE_END_SCREEN: self.draw_end_screen(game_manager)
+        elif state == config.GAME_STATE_START_SCREEN:
+            self.draw_start_screen(game_manager)
+        elif state == config.GAME_STATE_PLAYING:
+            self.draw_game_screen(game_manager)
+        elif state == config.GAME_STATE_END_SCREEN:
+            self.draw_end_screen(game_manager)
         pygame.display.flip()
 
     def draw_game_screen(self, game_manager):
         self.screen.fill((240, 240, 240))
         state_data = game_manager.current_state
-        if not state_data: return
+        if not state_data:
+            return
+
         for player_id, player in state_data["players"].items():
             self._draw_player(player_id, player, game_manager.client_id)
+        
         self._draw_ui(state_data)
         
+        restart_button_width, restart_button_height = 100, 40
+        restart_button_x = self.screen_width - restart_button_width - 10
+        restart_button_y = self.screen_height - self.ui_height + (self.ui_height - restart_button_height) // 2
+        
+        self.ui_rects['restart_button'] = self._draw_button(
+            (restart_button_x + restart_button_width // 2, restart_button_y + restart_button_height // 2), 
+            "Restart", 
+            (restart_button_width, restart_button_height)
+        )
+
     def _draw_player(self, player_id, player_data, local_client_id):
         target_x, target_y = player_data["pos"]
         current_x, current_y = self.interpolated_player_positions.get(player_id, (target_x, target_y))
+        
         interpolated_x = current_x + (target_x - current_x) * 0.5
         interpolated_y = current_y + (target_y - current_y) * 0.5
         self.interpolated_player_positions[player_id] = (interpolated_x, interpolated_y)
+        
         rect = pygame.Rect(interpolated_x * self.tile_size, interpolated_y * self.tile_size, self.tile_size, self.tile_size)
         
         sprite = self.assets.get_sprite(player_data["ingredient"])
         if sprite:
             sprite_rect = sprite.get_rect(center=rect.center)
             self.screen.blit(sprite, sprite_rect)
-        else: # Fallback
-             pygame.draw.rect(self.screen, (200, 100, 100), rect)
+        else:
+             pygame.draw.rect(self.screen, (200, 100, 100), rect) 
         
         if player_id == local_client_id:
             pygame.draw.rect(self.screen, (0, 150, 255, 150), rect, 3)
+        else:
+            pygame.draw.rect(self.screen, (0, 200, 0, 150), rect, 2)
+        
+        ingredient_name = player_data["ingredient"]
+        font = self.assets.get_font('default_18')
+        text_surface = font.render(ingredient_name, True, (0, 0, 0))
+        
+        text_rect = text_surface.get_rect(center=(rect.centerx, rect.bottom + 5))
+        self.screen.blit(text_surface, text_rect)
 
     def _draw_ui(self, state_data):
         ui_area = pygame.Rect(0, self.screen_height - self.ui_height, self.screen_width, self.ui_height)
@@ -64,9 +91,22 @@ class Renderer:
         self.screen.blit(timer_text, timer_rect)
 
         if "orders" in state_data and state_data["orders"]:
-            for i, order in enumerate(state_data["orders"][:2]):
-                order_text = self.assets.get_font('default_24').render(order["name"], True, (255, 255, 255))
-                self.screen.blit(order_text, (20, 20 + i * 25))
+            orders_bg_rect = pygame.Rect(10, 10, 280, len(state_data["orders"][:3]) * 25 + 30) # Adjusted height
+            pygame.draw.rect(self.screen, (50, 50, 50), orders_bg_rect, border_radius=5)
+            pygame.draw.rect(self.screen, (100, 100, 100), orders_bg_rect, 2, border_radius=5)
+            
+            orders_title_font = self.assets.get_font('default_18')
+            orders_text = orders_title_font.render(f"Orders:", True, (200, 200, 200))
+            self.screen.blit(orders_text, (orders_bg_rect.x + 10, orders_bg_rect.y + 8))
+
+            order_font = self.assets.get_font('default_24')
+            for i, order in enumerate(state_data["orders"][:3]):
+                order_name = order["name"]
+                ingredients_list = ", ".join(order.get("ingredients", []))
+                display_text = f"{order_name} ({ingredients_list})"
+                
+                order_text_surface = order_font.render(display_text, True, (255, 255, 0)) # Warna kuning terang
+                self.screen.blit(order_text_surface, (orders_bg_rect.x + 10, orders_bg_rect.y + 30 + i * 25))
 
     def draw_start_screen(self, game_manager):
         self.screen.fill((30, 30, 50))
@@ -74,7 +114,6 @@ class Renderer:
         title_rect = title_text.get_rect(center=(self.screen_width // 2, self.screen_height // 6))
         self.screen.blit(title_text, title_rect)
         
-        # Draw connected players
         if game_manager.current_state and "clients_info" in game_manager.current_state:
             y_offset = self.screen_height // 2 - 40
             players_title = self.assets.get_font('default_36').render("Players in Lobby:", True, (200, 200, 200))
@@ -91,7 +130,6 @@ class Renderer:
                 self.screen.blit(player_label, player_label_rect)
                 y_offset += 30
         
-        # Buttons
         is_ready = game_manager.current_state and game_manager.client_id in game_manager.current_state.get("clients_info", {}) and game_manager.current_state["clients_info"][game_manager.client_id].get("ready", False)
         all_ready = game_manager.current_state and len(game_manager.current_state.get("clients_info", {})) > 0 and all(c.get("ready", False) for c in game_manager.current_state.get("clients_info", {}).values())
 

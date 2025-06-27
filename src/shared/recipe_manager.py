@@ -11,37 +11,40 @@ class RecipeManager:
         return cls._instance
 
     def __init__(self, db_path=None):
-        if not self._initialized: 
+        if not self._initialized:
             if db_path is None:
                 base_dir = os.path.dirname(__file__)
                 db_path = os.path.join(base_dir, 'recipes.db')
-
             if not os.path.exists(db_path):
                 raise FileNotFoundError(f"Database tidak ditemukan di {db_path}")
-
             self.db_path = db_path
             self._recipes_cache = self._load_recipes_to_cache()
             RecipeManager._initialized = True
             print("RecipeManager initialized and recipes cached.")
         else:
             print("RecipeManager already initialized. Skipping __init__.")
-            
+
     def _load_recipes_to_cache(self):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         query = """
-            SELECT r.id, r.name, r.price, r.level, GROUP_CONCAT(i.name)
-            FROM recipes r
-            JOIN recipe_ingredients ri ON r.id = ri.recipe_id
-            JOIN ingredients i ON ri.ingredient_id = i.id
-            GROUP BY r.id
+        SELECT r.id, r.name, r.price, r.level, GROUP_CONCAT(i.name)
+        FROM recipes r
+        JOIN recipe_ingredients ri ON r.id = ri.recipe_id
+        JOIN ingredients i ON ri.ingredient_id = i.id
+        GROUP BY r.id
         """
         cursor.execute(query)
         cache = {}
         for row in cursor.fetchall():
             recipe_id, name, price, level, ingredients_str = row
             ingredients_set = frozenset(ingredients_str.split(','))
-            cache[ingredients_set] = {'id': recipe_id, 'name': name, 'price': price, 'level': level}
+            cache[ingredients_set] = {
+                'id': recipe_id,
+                'name': name,
+                'price': price,
+                'level': level
+            }
         conn.close()
         return cache
 
@@ -49,14 +52,6 @@ class RecipeManager:
         ingredients_to_check = frozenset(ingredients_list)
         return self._recipes_cache.get(ingredients_to_check)
 
-    def get_random_order(self, level=1):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, price FROM recipes WHERE level = ? ORDER BY RANDOM() LIMIT 1", (level,))
-        result = cursor.fetchone()
-        conn.close()
-        return {"name": result[0], "price": result[1]} if result else None
-    
     def get_recipes_by_ingredient_count(self, max_ingredients=None):
         if max_ingredients is None:
             return list(self._recipes_cache.values())

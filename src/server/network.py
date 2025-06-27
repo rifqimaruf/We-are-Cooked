@@ -1,5 +1,6 @@
 import socket
 import json
+import struct
 from . import config
 
 class Network:
@@ -14,7 +15,6 @@ class Network:
     def receive(self):
         data = self.sock.recv(config.BUFFER_SIZE)
         return json.loads(data.decode())
-        
+
     def get_addr(self):
-        """Return the client's socket address as a string"""
         return self.addr

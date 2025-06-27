@@ -27,14 +27,11 @@ class AssetManager:
         if not os.path.isdir(sprite_path):
             print(f"Warning: Sprite directory not found: {sprite_path}")
             return
-        
         ingredients = [
-            'Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'NoriSheet',
-            'Cucumber', 'Avocado', 'CrabMeat', 'Eel', 'CreamCheese', 'FishRoe'
+            'Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
+            'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe'
         ]
-        
         sprite_dims = (int(self.tile_size * 0.8), int(self.tile_size * 0.8))
-
         for ingredient in ingredients:
             try:
                 filename = ingredient.lower().replace(' ', '_') + '.png'
@@ -43,7 +40,7 @@ class AssetManager:
                     sprite = pygame.image.load(path).convert_alpha()
                     self.sprites[ingredient] = pygame.transform.scale(sprite, sprite_dims)
                 else:
-                    self.sprites[ingredient] = None # Explicitly set to None if not found
+                    self.sprites[ingredient] = None
             except pygame.error as e:
                 print(f"Error loading sprite for {ingredient}: {e}")
 
@@ -53,7 +50,7 @@ class AssetManager:
             self.images['end_bg'] = pygame.image.load(end_bg_path).convert()
         except pygame.error as e:
             print(f"Warning: Could not load end_bg.png: {e}")
-            self.images['end_bg'] = None
+        self.images['end_bg'] = None
 
     def _load_fonts(self):
         self.fonts['default_72'] = pygame.font.SysFont(None, 72)
@@ -64,6 +61,11 @@ class AssetManager:
         self.fonts['default_24'] = pygame.font.SysFont(None, 24)
         self.fonts['default_18'] = pygame.font.SysFont(None, 18)
 
-    def get_sprite(self, name): return self.sprites.get(name)
-    def get_image(self, name): return self.images.get(name)
-    def get_font(self, name): return self.fonts.get(name)
+    def get_sprite(self, name):
+        return self.sprites.get(name)
+
+    def get_image(self, name):
+        return self.images.get(name)
+
+    def get_font(self, name):
+        return self.fonts.get(name)
