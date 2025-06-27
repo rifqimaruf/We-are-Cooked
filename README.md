@@ -4,17 +4,19 @@ This is a multiplayer cooking game inspired by games like "Overcooked" but with 
 
 ## 🍥 Gameplay
 
-- Players control characters that each carry a specific ingredient (like Salmon, Tuna, Rice, etc.)
-- When players move and collide with each other, their ingredients can combine to create sushi recipes
+- Players control a specific ingredient (like Salmon, Tuna, Rice, etc.)
+- When players move and collide within a fusion station, their ingredients can combine to create sushi recipes
 - Successfully creating recipes earns points based on the recipe's price
 - The game has different recipe levels (1-4) with increasing complexity and value
 
 ## 🕹️ How to Play
-- Players can move using arrow keys
+- Players can move using **Arrow Keys**
 - Each players carry a single ingredient
-- When players collide, they can combine into a recipe
+- You can change your ingredient by going to the **Enter Station** (labeled green) and pressing **Enter**
+- Players can fuse within a **Fusion Station** (Labeled Red) to fuse into a recipe
 - If that was a valid recipe, points are awarded based on the recipe's price
 - The game has a timer and displays current orders to fulfill
+- There are limited time **Doorprize Events**, claim free prizes!
 
 ## 👨🏻‍🍳 Recipes
 The game includes recipes with various difficulty levels, each difficulty is directly determined by the amount of ingredients are needed to make it. The higher the level, the more pricey a recipe becomes.
@@ -29,32 +31,39 @@ pip install -r requirements.txt
 ### Server
 Run this command to initialize the server before turning on any client instance.
 ```sh
-python -m src.server
+python -m src.server.server
 ```
 
 
 ### Client
 Running this command will start up an individual client.
 ```sh
-python -m src.client
+python -m src.client.client
 ```
 
 ## 🔧 Technical Breakdown (For Contributions)
-1. Client-Server Architecture
-   - Server manages game state and broadcasts updates to all clients
-   - Clients send movement commands and render the game state
+1. Network Architecture:
+   - Server manages the game state and broadcasts updates to all clients
+   - Clients send movement commands to the server
+   - The server processes player movements, recipe combinations, and doorprize 
+interactions
 
-2. Database
-   - SQLite database stores all recipes and ingredients
-   - Recipes are organized by level (1-4) with increasing complexity
-   - Each recipe requires specific ingredients and has a set price
+2. Game State Management:
+   - The GameState class tracks player positions, ingredients, orders, score, 
+and timer
+   - The server regularly checks for recipe combinations and doorprize 
+interactions
+   - State updates are broadcast to all clients at regular intervals
 
-3. Key Components
-   - server.py: Handles client connections, game state updates, and broadcasts
-   - client.py: Renders the game and handles player input
-   - game_state.py: Manages player positions, recipe checking, and scoring
-   - recipe_manager.py: Interfaces with the recipe database and checks valid combinations
-   - initialize_database.py: Sets up the SQLite database with ingredients and recipes
+3. Client Rendering:
+   - The client uses Pygame to render the game state
+   - Visual effects and sound effects enhance the gameplay experience
+   - The client handles user input and sends commands to the server
+
+4. Game Phases:
+   - Start screen (lobby) where players wait for the game to begin
+   - Playing phase where players fulfill orders and collect points
+   - End screen showing the final score
 
 <!-- ## Credits
 This game was made as a Finals Submission to our Network Programming course. Proper recognition due to the developers: -->
