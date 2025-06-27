@@ -24,11 +24,12 @@ class RecipeManager:
             RecipeManager._initialized = True
             print("RecipeManager initialized and recipes cached.")
         else:
-            print("RecipeManager already initialized. Skipping __init__.")
+            pass
             
     def _load_recipes_to_cache(self):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
+        
         query = """
             SELECT r.id, r.name, r.price, r.level, GROUP_CONCAT(i.name)
             FROM recipes r
@@ -37,11 +38,19 @@ class RecipeManager:
             GROUP BY r.id
         """
         cursor.execute(query)
+        
         cache = {}
         for row in cursor.fetchall():
             recipe_id, name, price, level, ingredients_str = row
             ingredients_set = frozenset(ingredients_str.split(','))
-            cache[ingredients_set] = {'id': recipe_id, 'name': name, 'price': price, 'level': level}
+            
+            cache[ingredients_set] = {
+                'id': recipe_id,
+                'name': name,
+                'price': price,
+                'level': level
+            }
+            
         conn.close()
         return cache
 
@@ -49,17 +58,10 @@ class RecipeManager:
         ingredients_to_check = frozenset(ingredients_list)
         return self._recipes_cache.get(ingredients_to_check)
 
-    def get_random_order(self, level=1):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, price FROM recipes WHERE level = ? ORDER BY RANDOM() LIMIT 1", (level,))
-        result = cursor.fetchone()
-        conn.close()
-        return {"name": result[0], "price": result[1]} if result else None
-    
     def get_recipes_by_ingredient_count(self, max_ingredients=None):
         if max_ingredients is None:
             return list(self._recipes_cache.values())
+
         filtered_recipes = []
         for ingredients_set, recipe_data in self._recipes_cache.items():
             if len(ingredients_set) <= max_ingredients:
