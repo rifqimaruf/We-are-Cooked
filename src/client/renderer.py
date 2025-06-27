@@ -132,6 +132,7 @@ class Renderer:
             sprite_rect = sprite.get_rect(center=rect.center)
             self.screen.blit(sprite, sprite_rect)
         else:
+            #  print(f"[WARNING] Sprite for ingredient '{player_data['ingredient']}' not found.")
              pygame.draw.rect(self.screen, (200, 100, 100), rect) 
         
         if player_id == local_client_id:

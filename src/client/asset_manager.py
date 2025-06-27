@@ -34,8 +34,9 @@ class AssetManager:
         sprite_dims = (int(self.tile_size * 0.8), int(self.tile_size * 0.8))
         for ingredient in ingredients:
             try:
-                filename = ingredient.lower().replace(' ', '_') + '.png'
+                filename = ingredient.replace(' ', '') + '.png'
                 path = os.path.join(sprite_path, filename)
+                print(f"Loading sprite for {ingredient} from {path}")
                 if os.path.exists(path):
                     sprite = pygame.image.load(path).convert_alpha()
                     self.sprites[ingredient] = pygame.transform.scale(sprite, sprite_dims)
@@ -43,6 +44,7 @@ class AssetManager:
                     self.sprites[ingredient] = None
             except pygame.error as e:
                 print(f"Error loading sprite for {ingredient}: {e}")
+        print(f"Loaded {len(self.sprites)} ingredient sprites.")
 
     def _load_images(self):
         try:
