@@ -1,3 +1,4 @@
+# src/shared/game_state.py
 import random
 import threading
 import time
@@ -22,11 +23,17 @@ class GameState:
         self._lock = threading.Lock()
         self._fusion_event_queue = []
         self._visual_events = []
-        
+
         self.fusion_stations = []
-        self.enter_station = None 
+        self.enter_station = None
+
+        self.doorprize_station = None # (x, y) dari doorprize station
+        self.doorprize_spawn_time = 0 # timestamp kapan doorprize muncul
+        self.next_doorprize_spawn_delay = random.uniform(config.DOORPRIZE_SPAWN_INTERVAL_MIN, config.DOORPRIZE_SPAWN_INTERVAL_MAX)
+        self.players_collected_doorprize = set() # Set of player_ids who collected from current doorprize
 
         self.last_order_spawn_time = time.time()
+
 
     def add_player(self, player_id, ingredient, pos):
         with self._lock:
@@ -60,22 +67,17 @@ class GameState:
     def _is_player_on_station(self, player_pos, station_top_left):
         px, py = int(player_pos[0]), int(player_pos[1])
         sx, sy = station_top_left
-        # Cek apakah pemain berada di dalam area 2x2 stasiun
         return sx <= px < sx + config.STATION_SIZE and sy <= py < sy + config.STATION_SIZE
 
-    def _get_random_station_pos(self, existing_positions):
-        """Mencari posisi 2x2 acak yang tidak tumpang tindih."""
+    def _get_random_station_pos(self, existing_positions, station_size=config.STATION_SIZE):
         while True:
-            # Pastikan stasiun tidak keluar dari batas grid
-            x = random.randint(0, config.GRID_WIDTH - config.STATION_SIZE)
-            y = random.randint(0, config.GRID_HEIGHT - config.STATION_SIZE)
+            x = random.randint(0, config.GRID_WIDTH - station_size)
+            y = random.randint(0, config.GRID_HEIGHT - station_size)
             new_pos = (x, y)
             is_overlapping = False
-            # Cek tumpang tindih dengan stasiun lain
-            for ex_x, ex_y in existing_positions:
-                # Periksa tumpang tindih area 2x2
-                if not (x + config.STATION_SIZE <= ex_x or x >= ex_x + config.STATION_SIZE or \
-                        y + config.STATION_SIZE <= ex_y or y >= ex_y + config.STATION_SIZE):
+            for ex_x, ex_y, ex_size in existing_positions:
+                if not (x + station_size <= ex_x or x >= ex_x + ex_size or \
+                        y + station_size <= ex_y or y >= ex_y + ex_size):
                     is_overlapping = True
                     break
             if not is_overlapping:
@@ -86,17 +88,21 @@ class GameState:
             self.fusion_stations = []
             existing_station_positions = []
 
-            # Generate 2 fusion stations
             for _ in range(2):
-                pos = self._get_random_station_pos(existing_station_positions)
+                pos = self._get_random_station_pos(existing_station_positions, config.STATION_SIZE)
                 self.fusion_stations.append(pos)
-                existing_station_positions.append(pos)
-            
-            # Generate 1 enter station
-            pos = self._get_random_station_pos(existing_station_positions)
+                existing_station_positions.append((*pos, config.STATION_SIZE))
+
+            pos = self._get_random_station_pos(existing_station_positions, config.STATION_SIZE)
             self.enter_station = pos
-            existing_station_positions.append(pos)
-            
+            existing_station_positions.append((*pos, config.STATION_SIZE))
+
+            self.doorprize_station = None # Reset for new game
+            # Set initial doorprize_spawn_time so it spawns after the first delay
+            self.doorprize_spawn_time = time.time() 
+            self.next_doorprize_spawn_delay = random.uniform(config.DOORPRIZE_SPAWN_INTERVAL_MIN, config.DOORPRIZE_SPAWN_INTERVAL_MAX)
+            self.players_collected_doorprize.clear()
+
             print(f"Stations initialized: Fusion={self.fusion_stations}, Enter={self.enter_station}")
 
     def can_player_change_ingredient(self, player_id):
@@ -105,6 +111,51 @@ class GameState:
             if not p or not self.enter_station:
                 return False
             return self._is_player_on_station(p.pos, self.enter_station)
+
+    def spawn_doorprize_station(self, current_time):
+        with self._lock:
+            if self.doorprize_station is None:
+                existing_station_positions = [(*fs, config.STATION_SIZE) for fs in self.fusion_stations]
+                if self.enter_station:
+                    existing_station_positions.append((*self.enter_station, config.STATION_SIZE))
+
+                pos = self._get_random_station_pos(existing_station_positions, config.STATION_SIZE)
+                self.doorprize_station = pos
+                self.doorprize_spawn_time = current_time # Ini waktu stasiun ini muncul
+                self.players_collected_doorprize.clear() # Clear untuk stasiun baru ini
+                self._visual_events.append({"type": "doorprize_spawn", "data": {"pos": pos}})
+                print(f"Doorprize station spawned at {pos} at time {current_time:.2f}")
+  
+    def check_doorprize_interaction(self):
+        with self._lock:
+            if not self.doorprize_station:
+                return
+
+            current_time = time.time()
+            if current_time - self.doorprize_spawn_time > config.DOORPRIZE_DURATION:
+                # Logika penghapusan stasiun doorprize setelah 3 detik
+                print(f"Doorprize station at {self.doorprize_station} expired.")
+                self._visual_events.append({"type": "doorprize_expire", "data": {"pos": self.doorprize_station}})
+                self.doorprize_station = None
+                self.doorprize_spawn_time = current_time # Reset time for next spawn
+                self.next_doorprize_spawn_delay = random.uniform(config.DOORPRIZE_SPAWN_INTERVAL_MIN, config.DOORPRIZE_SPAWN_INTERVAL_MAX)
+                self.players_collected_doorprize.clear()
+                return
+
+            # Logika interaksi pemain dengan doorprize station yang aktif
+            for player_id, player in self.players.items():
+                # Pastikan pemain belum mengumpulkan dari stasiun ini DAN
+                # Pemain berada di dalam area doorprize station
+                if player_id not in self.players_collected_doorprize and \
+                   self._is_player_on_station(player.pos, self.doorprize_station):
+                    
+                    score_gain = random.randint(config.DOORPRIZE_SCORE_MIN, config.DOORPRIZE_SCORE_MAX)
+                    self.score += score_gain # Poin ditambahkan ke score total game
+                    self.players_collected_doorprize.add(player_id) # Tandai pemain sudah mengumpulkan
+                    # Tambahkan event visual agar klien bisa memutar SFX atau menampilkan notifikasi
+                    self._visual_events.append({"type": "doorprize_collect", "data": {"player_id": player_id, "score": score_gain, "pos": self.doorprize_station}})
+                    print(f"Player {player_id} collected {score_gain} from doorprize at {self.doorprize_station}. Total score: {self.score}")
+
 
     def check_for_merge(self):
         with self._lock:
@@ -186,9 +237,7 @@ class GameState:
                 print(f"Order '{order_name_fulfilled}' fulfilled.")
                 self._visual_events.append({"type": "recipe_fusion", "data": {"pos": pos, "recipe_name": recipe['name']}})
 
-            # Filter order yang fulfilled
             self.orders = [order for order in self.orders if not order.get('fulfilled', False)]
-            # Tidak ada lagi logika generate order di sini, karena akan dipicu oleh timer
             
     def to_dict(self):
         with self._lock:
@@ -200,18 +249,22 @@ class GameState:
                     serializable_orders_copy.append({
                         "name": order.get("name"),
                         "price": order.get("price"),
-                        # --- KONFIRMASI KODE DI SINI ---
-                        # Pastikan ini sudah benar, karena data order sudah mengandung list ingredients
-                        "ingredients": order.get("ingredients", []) 
-                        # --- AKHIR KONFIRMASI ---
+                        "ingredients": order.get("ingredients", [])
                     })
             score_copy = self.score
             timer_copy = self.timer
+            
             visual_events_copy = list(self._visual_events)
             self._visual_events.clear()
             
             fusion_stations_copy = list(self.fusion_stations)
             enter_station_copy = self.enter_station
+            
+            doorprize_station_copy = None
+            doorprize_remaining_time = 0
+            if self.doorprize_station:
+                doorprize_station_copy = self.doorprize_station
+                doorprize_remaining_time = max(0, config.DOORPRIZE_DURATION - (time.time() - self.doorprize_spawn_time))
 
         return {
             "players": players_copy,
@@ -220,7 +273,9 @@ class GameState:
             "timer": timer_copy,
             "visual_events": visual_events_copy,
             "fusion_stations": fusion_stations_copy,
-            "enter_station": enter_station_copy
+            "enter_station": enter_station_copy,
+            "doorprize_station": doorprize_station_copy,
+            "doorprize_remaining_time": doorprize_remaining_time
         }
 
     def generate_orders(self, num_active_players):
@@ -230,25 +285,20 @@ class GameState:
                 print("DEBUG: No active players, cannot generate orders.")
                 return
             
-            # --- MODIFIKASI KODE UTAMA DI SINI ---
-            # 1. Coba dapatkan resep berdasarkan jumlah pemain aktif
             possible_recipes = self.recipe_manager.get_recipes_by_ingredient_count(max_ingredients=num_active_players)
             
             if not possible_recipes:
                 print(f"DEBUG: No recipes found suitable for {num_active_players} players. Falling back to all recipes.")
-                # 2. Jika tidak ada yang cocok, ambil semua resep
                 possible_recipes = self.recipe_manager.get_all_recipes()
 
             if not possible_recipes:
                 print("DEBUG: Warning: No recipes available in the database at all. Cannot generate orders.")
                 return
 
-            # 3. Pilih satu resep acak dari daftar resep yang memenuhi syarat (atau semua resep jika fallback)
             selected_recipe = random.choice(possible_recipes)
-            # --- AKHIR MODIFIKASI ---
             
             ingredients_list = selected_recipe.get('ingredients', []) 
-            if not isinstance(ingredients_list, list): # Jaga-jaga jika masih frozenset dari cache lama
+            if not isinstance(ingredients_list, list): 
                 ingredients_list = list(ingredients_list)
             
             self.orders.append({

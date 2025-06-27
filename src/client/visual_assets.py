@@ -1,3 +1,4 @@
+# src/client/visual_assets.py
 import pygame
 import os
 
@@ -27,7 +28,7 @@ class SoundManager:
     def play_sfx(self, name: str, volume: float = 0.5):
         if not self.enabled:
             return
-        sound = self.sounds.get(name) or self.sounds.get(name.replace("Success", "Succes")) # Fallback for typo
+        sound = self.sounds.get(name) or self.sounds.get(name.replace("Success", "Succes")) 
         if sound:
             sound.set_volume(volume)
             sound.play()

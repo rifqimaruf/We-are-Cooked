@@ -1,3 +1,4 @@
+# src/server.py
 import socket
 import threading
 import json
@@ -56,10 +57,15 @@ def add_game_event(event_type: str, data: Dict[str, Any]):
     game_events = [e for e in game_events if current_time - e.timestamp < 5.0]
 
 def create_and_broadcast_state():
-    state_dict = game_state.to_dict() # Ini akan mengambil order yang sudah difilter
+    state_dict = game_state.to_dict()
     state_dict["clients_info"] = clients_info
     state_dict["game_started"] = game_started
-    state_dict["visual_effects"] = {"game_events": [{"id": e.id, "type": e.event_type, "data": e.data} for e in game_events[-10:]]}
+    
+    # Filter visual events for events that happened recently and clear them from game_state
+    state_dict["visual_effects"] = {"game_events": []}
+    if "_visual_events" in state_dict: # game_state.to_dict() now provides _visual_events
+        state_dict["visual_effects"]["game_events"].extend(state_dict["_visual_events"])
+        del state_dict["_visual_events"] # Clean up after copying
 
     encoded_datas = {}
     for player_id in connections.keys():
@@ -117,6 +123,11 @@ def restart_game():
     game_state.last_order_spawn_time = time.time() # Reset timer order spawn
     # Inisialisasi delay untuk order berikutnya
     game_state.next_order_spawn_delay = random.uniform(config.ORDER_SPAWN_INTERVAL_MIN, config.ORDER_SPAWN_INTERVAL_MAX)
+
+    # Inisialisasi doorprize spawn time saat game restart
+    game_state.doorprize_spawn_time = time.time() - game_state.next_doorprize_spawn_delay # Make it ready to spawn soon
+    game_state.next_doorprize_spawn_delay = random.uniform(config.DOORPRIZE_SPAWN_INTERVAL_MIN, config.DOORPRIZE_SPAWN_INTERVAL_MAX)
+
 
     num_players_connected = len(clients_info)
 
@@ -251,7 +262,7 @@ def handle_client(conn: socket.socket, addr: Any):
                                             new_ing = random.choice([i for i in all_possible_ingredients if i != old_ing])
                                             player.ingredient = new_ing
                                             print(f"Player {player_id} changed ingredient from {old_ing} to {new_ing} at Enter Station.")
-                                            add_game_event("ingredient_change", {"player_id": player_id, "old_ingredient": old_ing, "new_ingredient": new_ing}) # Opsional: event visual
+                                            add_game_event("ingredient_change", {"player_id": player_id, "old_ingredient": old_ing, "new_ingredient": new_ing})
                                 else:
                                     print(f"Player {player_id} tried to change ingredient but not on Enter Station.")
 
@@ -278,7 +289,7 @@ def game_timer_thread():
 
     last_broadcast_time = time.time()
 
-    print(f"Timer thread: Starting with timer_thread_active={timer_thread_active} and game_started={game_started}") 
+    print(f"Timer thread: Starting with timer_thread_active={timer_thread_active} and game_started={game_started}")
 
     while timer_thread_active and game_started:
         current_time = time.time()
@@ -288,11 +299,18 @@ def game_timer_thread():
         game_state.check_for_merge()
         game_state.process_fusion_events()
 
+        # Logika Doorprize Station
+        # Hanya spawn jika tidak ada doorprize station aktif DAN sudah melewati waktu delay yang ditentukan
+        if game_state.doorprize_station is None and \
+           current_time - game_state.doorprize_spawn_time >= game_state.next_doorprize_spawn_delay:
+            game_state.spawn_doorprize_station(current_time)
+        elif game_state.doorprize_station is not None:
+            game_state.check_doorprize_interaction() # Ini akan menghapus jika sudah expired dan mengatur timer berikutnya
+
         if current_time - game_state.last_order_spawn_time >= game_state.next_order_spawn_delay:
             if len(game_state.players) > 0:
                 game_state.generate_orders(len(game_state.players))
-                game_state.last_order_spawn_time = current_time # Reset timer
-                # Hitung delay baru untuk order berikutnya
+                game_state.last_order_spawn_time = current_time 
                 game_state.next_order_spawn_delay = random.uniform(config.ORDER_SPAWN_INTERVAL_MIN, config.ORDER_SPAWN_INTERVAL_MAX)
                 print(f"DEBUG: Next order will spawn in {game_state.next_order_spawn_delay:.2f} seconds.")
             else:
@@ -303,15 +321,16 @@ def game_timer_thread():
             last_broadcast_time = current_time
 
         if remaining <= 0:
-            print(f"Timer thread: Game timer finished. Final timer: {game_state.timer}. game_started: {game_started}") 
+            print(f"Timer thread: Game timer finished. Final timer: {game_state.timer}. game_started: {game_started}")
             game_state.timer = 0
             create_and_broadcast_state()
             print("Game timer finished. Awaiting player action to return to lobby.")
-            break 
+            break
 
         time.sleep(0.01)
-    
-    print(f"Timer thread: Exiting loop. timer_thread_active={timer_thread_active}, game_started={game_started}") 
+
+    print(f"Timer thread: Exiting loop. timer_thread_active={timer_thread_active}, game_started={game_started}")
+
 
 def start():
     """Memulai server dan menunggu koneksi klien."""

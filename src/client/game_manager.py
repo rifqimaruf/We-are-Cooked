@@ -1,3 +1,4 @@
+# src/client/game_manager.py
 from src.shared import config
 
 class GameManager:
@@ -11,13 +12,11 @@ class GameManager:
         self.is_disconnected = False
 
     def update_state(self, new_state):
-        # Selalu update client_id jika ada di state baru
         if "client_id" in new_state:
             if self.client_id != new_state["client_id"]:
                 print(f"[DEBUG] client_id berubah: {self.client_id} -> {new_state['client_id']}")
             self.client_id = new_state["client_id"]
         self.current_state = new_state
-        # Debug: pastikan client_id selalu ada di players
         if self.current_state and self.client_id not in self.current_state.get("players", {}):
             print(f"[WARNING] client_id {self.client_id} tidak ditemukan di state['players']! Mungkin sedang merge atau ada bug.")
 
@@ -51,9 +50,19 @@ class GameManager:
             self._timer_warning_played = True
         if "visual_effects" in self.current_state:
             for event in self.current_state["visual_effects"].get("game_events", []):
+                # Memastikan event hanya diproses sekali per ID
                 if event["id"] not in self._processed_event_ids:
                     if event["type"] == "recipe_fusion":
                         asset_manager.sound_manager.play_sfx("Success Order", volume=0.6)
+                        self._processed_event_ids.add(event["id"])
+                    elif event["type"] == "doorprize_spawn":
+                        asset_manager.sound_manager.play_sfx("Doorprize Spawn", volume=0.8) # Contoh SFX baru
+                        self._processed_event_ids.add(event["id"])
+                    elif event["type"] == "doorprize_collect":
+                        asset_manager.sound_manager.play_sfx("Doorprize Collect", volume=0.8) # Contoh SFX baru
+                        self._processed_event_ids.add(event["id"])
+                    elif event["type"] == "doorprize_expire":
+                        # Mungkin tidak perlu SFX khusus untuk expire, atau SFX yang lebih lembut
                         self._processed_event_ids.add(event["id"])
 
     def handle_disconnect(self):

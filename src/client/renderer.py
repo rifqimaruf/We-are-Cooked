@@ -1,5 +1,7 @@
+# src/client/renderer.py
 import pygame
-from src.shared import config # Pastikan ini diimpor
+from src.shared import config 
+import time # Import time for calculating remaining time
 
 class Renderer:
     def __init__(self, screen, asset_manager):
@@ -33,9 +35,8 @@ class Renderer:
         if not state_data:
             return
 
-        # --- PENAMBAHAN KODE BARU DI SINI ---
         self._draw_stations(state_data)
-        # --- AKHIR PENAMBAHAN ---
+        self._draw_doorprize_station(state_data) # Panggil fungsi baru ini
 
         for player_id, player in state_data["players"].items():
             self._draw_player(player_id, player, game_manager.client_id)
@@ -52,7 +53,6 @@ class Renderer:
             (restart_button_width, restart_button_height)
         )
 
-    # --- PENAMBAHAN KODE BARU DI SINI ---
     def _draw_stations(self, state_data):
         # Draw Fusion Stations
         fusion_stations = state_data.get("fusion_stations", [])
@@ -60,8 +60,8 @@ class Renderer:
             for row in range(config.STATION_SIZE):
                 for col in range(config.STATION_SIZE):
                     rect = pygame.Rect((sx + col) * self.tile_size, (sy + row) * self.tile_size, self.tile_size, self.tile_size)
-                    pygame.draw.rect(self.screen, (255, 150, 150, 100), rect) # Warna merah muda transparan
-                    pygame.draw.rect(self.screen, (200, 0, 0), rect, 2) # Border merah
+                    pygame.draw.rect(self.screen, (255, 150, 150, 100), rect) 
+                    pygame.draw.rect(self.screen, (200, 0, 0), rect, 2) 
 
             font = self.assets.get_font('default_18')
             text_surface = font.render(f"Fusion {i+1}", True, (50, 50, 50))
@@ -75,14 +75,47 @@ class Renderer:
             for row in range(config.STATION_SIZE):
                 for col in range(config.STATION_SIZE):
                     rect = pygame.Rect((sx + col) * self.tile_size, (sy + row) * self.tile_size, self.tile_size, self.tile_size)
-                    pygame.draw.rect(self.screen, (150, 255, 150, 100), rect) # Warna hijau muda transparan
-                    pygame.draw.rect(self.screen, (0, 200, 0), rect, 2) # Border hijau
+                    pygame.draw.rect(self.screen, (150, 255, 150, 100), rect) 
+                    pygame.draw.rect(self.screen, (0, 200, 0), rect, 2) 
             
             font = self.assets.get_font('default_18')
             text_surface = font.render("Enter", True, (50, 50, 50))
             text_rect = text_surface.get_rect(topleft=(sx * self.tile_size + 5, sy * self.tile_size + 5))
             self.screen.blit(text_surface, text_rect)
-    # --- AKHIR PENAMBAHAN ---
+
+    def _draw_doorprize_station(self, state_data):
+        doorprize_station_pos = state_data.get("doorprize_station")
+        if doorprize_station_pos:
+            sx, sy = doorprize_station_pos
+            doorprize_remaining_time = state_data.get("doorprize_remaining_time", 0)
+
+            # Warna yang lebih mencolok untuk doorprize (misal: ungu atau emas)
+            fill_color = (200, 100, 255, 150) # Ungu transparan
+            border_color = (150, 0, 200) # Ungu gelap
+
+            # Animasi visual berdasarkan waktu yang tersisa (opsional)
+            # Misalnya, warna bisa berkedip atau menjadi lebih transparan saat mendekati akhir
+            if doorprize_remaining_time < 1.0: # Jika kurang dari 1 detik
+                blink_alpha = int(150 * (doorprize_remaining_time * 2 % 1)) + 50 # Berkedip
+                fill_color = (200, 100, 255, blink_alpha)
+            
+            for row in range(config.STATION_SIZE):
+                for col in range(config.STATION_SIZE):
+                    rect = pygame.Rect((sx + col) * self.tile_size, (sy + row) * self.tile_size, self.tile_size, self.tile_size)
+                    pygame.draw.rect(self.screen, fill_color, rect)
+                    pygame.draw.rect(self.screen, border_color, rect, 2)
+            
+            font = self.assets.get_font('default_24')
+            text_surface = font.render("Doorprize!", True, (255, 255, 255))
+            text_rect = text_surface.get_rect(center=((sx + 0.5) * self.tile_size, (sy + 0.5) * self.tile_size - 10))
+            self.screen.blit(text_surface, text_rect)
+
+            # Tampilkan sisa waktu
+            timer_font = self.assets.get_font('default_18')
+            timer_text_surface = timer_font.render(f"{doorprize_remaining_time:.1f}s", True, (255, 255, 255))
+            timer_text_rect = timer_text_surface.get_rect(center=((sx + 0.5) * self.tile_size, (sy + 1.5) * self.tile_size + 10))
+            self.screen.blit(timer_text_surface, timer_text_rect)
+
 
     def _draw_player(self, player_id, player_data, local_client_id):
         target_x, target_y = player_data["pos"]
@@ -127,7 +160,7 @@ class Renderer:
         self.screen.blit(timer_text, timer_rect)
 
         if "orders" in state_data and state_data["orders"]:
-            orders_bg_rect = pygame.Rect(10, 10, 280, len(state_data["orders"][:3]) * 25 + 30) # Adjusted height
+            orders_bg_rect = pygame.Rect(10, 10, 280, len(state_data["orders"][:3]) * 25 + 30) 
             pygame.draw.rect(self.screen, (50, 50, 50), orders_bg_rect, border_radius=5)
             pygame.draw.rect(self.screen, (100, 100, 100), orders_bg_rect, 2, border_radius=5)
             
@@ -141,7 +174,7 @@ class Renderer:
                 ingredients_list = ", ".join(order.get("ingredients", []))
                 display_text = f"{order_name} ({ingredients_list})"
                 
-                order_text_surface = order_font.render(display_text, True, (255, 255, 0)) # Warna kuning terang
+                order_text_surface = order_font.render(display_text, True, (255, 255, 0)) 
                 self.screen.blit(order_text_surface, (orders_bg_rect.x + 10, orders_bg_rect.y + 30 + i * 25))
 
     def draw_start_screen(self, game_manager):
