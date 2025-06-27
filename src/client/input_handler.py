@@ -10,9 +10,7 @@ class InputHandler:
                 continue
 
             state = game_manager.game_screen_state
-            # Tambahan: Jangan proses input jika client_id tidak ada di state['players'] saat PLAYING
             if state == config.GAME_STATE_PLAYING and (not game_manager.current_state or game_manager.client_id not in game_manager.current_state.get('players', {})):
-                # Player sedang merge/hilang, abaikan input
                 continue
             
             if state == config.GAME_STATE_START_SCREEN:
@@ -34,13 +32,9 @@ class InputHandler:
                         actions.append({'type': 'network', 'data': {'action': 'restart'}})
                         actions.append({'type': 'sfx', 'name': 'Splash Sound'})
                 
-                # --- MODIFIKASI KODE YANG SUDAH ADA DI SINI ---
-                # Tambahkan deteksi tombol Enter (KEYDOWN) untuk ganti ingredient
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
-                    # Klien hanya mengirimkan aksi, validasi utama di server
                     actions.append({'type': 'network', 'data': {'action': 'change_ingredient'}})
                     actions.append({'type': 'sfx', 'name': 'Splash Sound'}) # Asumsi SFX diputar jika mencoba ganti
-                # --- AKHIR MODIFIKASI ---
             elif state == config.GAME_STATE_END_SCREEN:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     if ui_rects.get('play_again_button') and ui_rects['play_again_button'].collidepoint(event.pos):

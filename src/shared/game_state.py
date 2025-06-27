@@ -1,7 +1,7 @@
 import random
 import threading
 import time
-from . import config # Pastikan ini diimpor
+from . import config
 from .recipe_manager import RecipeManager
 
 class PlayerState:
@@ -23,10 +23,10 @@ class GameState:
         self._fusion_event_queue = []
         self._visual_events = []
         
-        # --- PENAMBAHAN KODE BARU DI SINI ---
-        self.fusion_stations = []  # List of (x, y) tuples for top-left corner of 2x2 fusion stations
-        self.enter_station = None  # (x, y) tuple for top-left corner of the 2x2 enter station
-        # --- AKHIR PENAMBAHAN ---
+        self.fusion_stations = []
+        self.enter_station = None 
+
+        self.last_order_spawn_time = time.time()
 
     def add_player(self, player_id, ingredient, pos):
         with self._lock:
@@ -57,7 +57,6 @@ class GameState:
             p.pos = (final_x, final_y)
             p.target_pos = (final_x, final_y)
 
-    # --- PENAMBAHAN KODE BARU DI SINI ---
     def _is_player_on_station(self, player_pos, station_top_left):
         px, py = int(player_pos[0]), int(player_pos[1])
         sx, sy = station_top_left
@@ -106,7 +105,6 @@ class GameState:
             if not p or not self.enter_station:
                 return False
             return self._is_player_on_station(p.pos, self.enter_station)
-    # --- AKHIR PENAMBAHAN ---
 
     def check_for_merge(self):
         with self._lock:
@@ -116,13 +114,10 @@ class GameState:
                 positions_on_grid.setdefault((grid_x, grid_y), []).append(p)
             temp_players_processed_in_merge_cycle = set() 
             
-            # --- MODIFIKASI KODE YANG SUDAH ADA DI SINI ---
-            # Hanya cek fusi jika ada stasiun fusi yang terdefinisi
             if not self.fusion_stations:
-                return False # Tidak ada stasiun fusi, tidak ada fusi yang bisa terjadi
+                return False 
 
             for pos_key, plist in positions_on_grid.items():
-                # Cek apakah posisi pos_key berada di dalam salah satu fusion_stations
                 is_on_fusion_station = False
                 for station_pos in self.fusion_stations:
                     if self._is_player_on_station(pos_key, station_pos):
@@ -130,7 +125,7 @@ class GameState:
                         break
                 
                 if not is_on_fusion_station:
-                    continue # Abaikan fusi jika tidak di stasiun fusi
+                    continue
 
                 if len(plist) > 1:
                     current_players_on_tile_available = {p.player_id: p for p in plist if p.player_id not in temp_players_processed_in_merge_cycle}
@@ -176,6 +171,7 @@ class GameState:
         with self._lock:
             events_to_process = list(self._fusion_event_queue)
             self._fusion_event_queue.clear()
+            
             for event in events_to_process:
                 recipe = event['recipe']
                 pos = event['pos']
@@ -183,19 +179,17 @@ class GameState:
                 order_name_fulfilled = event['order_name_fulfilled']
                 self.score += recipe["price"]
                 print(f"Processing Fusion: {recipe['name']} served! +{recipe['price']} cuan at {pos}")
-                # Tidak perlu hapus/tambah player, tidak perlu ubah ingredient
                 for order_obj in self.orders:
                     if order_obj['name'] == order_name_fulfilled:
                         order_obj['fulfilled'] = True
                         break
                 print(f"Order '{order_name_fulfilled}' fulfilled.")
-                # Tambahkan visual event untuk fusi
-                self._visual_events.append({"type": "recipe_fusion", "data": {"pos": pos, "recipe_name": recipe['name']}}) # Ini penting untuk SFX di klien
-            self.orders = [order for order in self.orders if not order.get('fulfilled', False)]
-            if not self.orders and len(self.players) > 0:
-                self.generate_orders(len(self.players))
-                print("All orders fulfilled, generating new ones.")
+                self._visual_events.append({"type": "recipe_fusion", "data": {"pos": pos, "recipe_name": recipe['name']}})
 
+            # Filter order yang fulfilled
+            self.orders = [order for order in self.orders if not order.get('fulfilled', False)]
+            # Tidak ada lagi logika generate order di sini, karena akan dipicu oleh timer
+            
     def to_dict(self):
         with self._lock:
             players_copy = {pid: {"ingredient": p.ingredient, "pos": p.pos, "target_pos": p.target_pos}
@@ -206,17 +200,18 @@ class GameState:
                     serializable_orders_copy.append({
                         "name": order.get("name"),
                         "price": order.get("price"),
-                        "ingredients": list(order.get("ingredients", []))
+                        # --- KONFIRMASI KODE DI SINI ---
+                        # Pastikan ini sudah benar, karena data order sudah mengandung list ingredients
+                        "ingredients": order.get("ingredients", []) 
+                        # --- AKHIR KONFIRMASI ---
                     })
             score_copy = self.score
             timer_copy = self.timer
             visual_events_copy = list(self._visual_events)
             self._visual_events.clear()
             
-            # --- PENAMBAHAN KODE BARU DI SINI ---
             fusion_stations_copy = list(self.fusion_stations)
             enter_station_copy = self.enter_station
-            # --- AKHIR PENAMBAHAN ---
 
         return {
             "players": players_copy,
@@ -224,30 +219,42 @@ class GameState:
             "score": score_copy,
             "timer": timer_copy,
             "visual_events": visual_events_copy,
-            # --- PENAMBAHAN KODE BARU DI SINI ---
             "fusion_stations": fusion_stations_copy,
             "enter_station": enter_station_copy
-            # --- AKHIR PENAMBAHAN ---
         }
 
     def generate_orders(self, num_active_players):
         with self._lock:
+            print(f"DEBUG: generate_orders called with num_active_players={num_active_players}")
             if num_active_players == 0:
-                self.orders = []
-                print("No active players, cannot generate orders.")
+                print("DEBUG: No active players, cannot generate orders.")
                 return
+            
+            # --- MODIFIKASI KODE UTAMA DI SINI ---
+            # 1. Coba dapatkan resep berdasarkan jumlah pemain aktif
             possible_recipes = self.recipe_manager.get_recipes_by_ingredient_count(max_ingredients=num_active_players)
+            
             if not possible_recipes:
-                print("Warning: No suitable recipes found for current number of players.")
-                self.orders = []
+                print(f"DEBUG: No recipes found suitable for {num_active_players} players. Falling back to all recipes.")
+                # 2. Jika tidak ada yang cocok, ambil semua resep
+                possible_recipes = self.recipe_manager.get_all_recipes()
+
+            if not possible_recipes:
+                print("DEBUG: Warning: No recipes available in the database at all. Cannot generate orders.")
                 return
-            num_orders_to_generate = min(3, len(possible_recipes))
-            selected_orders = random.sample(possible_recipes, num_orders_to_generate)
-            self.orders = []
-            for o in selected_orders:
-                self.orders.append({
-                    "name": o['name'],
-                    "price": o['price'],
-                    "ingredients": list(o['ingredients'])
-                })
-            print(f"Generated orders (with ingredients): {self.orders}")
+
+            # 3. Pilih satu resep acak dari daftar resep yang memenuhi syarat (atau semua resep jika fallback)
+            selected_recipe = random.choice(possible_recipes)
+            # --- AKHIR MODIFIKASI ---
+            
+            ingredients_list = selected_recipe.get('ingredients', []) 
+            if not isinstance(ingredients_list, list): # Jaga-jaga jika masih frozenset dari cache lama
+                ingredients_list = list(ingredients_list)
+            
+            self.orders.append({
+                "name": selected_recipe['name'],
+                "price": selected_recipe['price'],
+                "ingredients": ingredients_list,
+                "fulfilled": False
+            })
+            print(f"DEBUG: Added 1 new order: {selected_recipe['name']}. Total orders: {len(self.orders)}")

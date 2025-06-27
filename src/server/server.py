@@ -56,10 +56,10 @@ def add_game_event(event_type: str, data: Dict[str, Any]):
     game_events = [e for e in game_events if current_time - e.timestamp < 5.0]
 
 def create_and_broadcast_state():
-    state_dict = game_state.to_dict()
+    state_dict = game_state.to_dict() # Ini akan mengambil order yang sudah difilter
     state_dict["clients_info"] = clients_info
     state_dict["game_started"] = game_started
-    state_dict["visual_effects"] = {"game_events": [{"id": e.id, "type": e.event_type, "data": e.data} for e in game_events[-10:]]} # Perbaikan nama key
+    state_dict["visual_effects"] = {"game_events": [{"id": e.id, "type": e.event_type, "data": e.data} for e in game_events[-10:]]}
 
     encoded_datas = {}
     for player_id in connections.keys():
@@ -105,17 +105,22 @@ def restart_game():
         if timer_thread_instance.is_alive():
             print("Warning: Old timer thread did not terminate in time for restart.")
 
-    game_state = GameState()
+    game_state = GameState() # Reset game state
     game_started = True
     game_events = []
     print(f"Restarting game: game_started set to {game_started}") 
 
-    # --- PENAMBAHAN KODE BARU DI SINI ---
     game_state.initialize_stations() # Inisialisasi posisi stasiun
-    # --- AKHIR PENAMBAHAN ---
+
+    # --- MODIFIKASI KODE DI SINI ---
+    # Generate satu order awal saat game dimulai
+    game_state.generate_orders(len(clients_info)) 
+    game_state.last_order_spawn_time = time.time() # Reset timer order spawn
+    # Inisialisasi delay untuk order berikutnya
+    game_state.next_order_spawn_delay = random.uniform(config.ORDER_SPAWN_INTERVAL_MIN, config.ORDER_SPAWN_INTERVAL_MAX)
+    # --- AKHIR MODIFIKASI ---
 
     num_players_connected = len(clients_info)
-    game_state.generate_orders(num_players_connected) 
 
     required_ingredients_pool = []
     for order in game_state.orders:
@@ -283,23 +288,23 @@ def game_timer_thread():
         remaining = max(0, end_time - current_time)
         game_state.timer = int(remaining)
 
-        fusion_happened = False
-        if current_time - last_merge_check_time >= MERGE_CHECK_INTERVAL:
-            # Debug sebelum fusion
-            # print("[DEBUG] Players before fusion:", list(game_state.players.keys())) # Komen atau hapus ini untuk produksi
-            game_state.check_for_merge()
-            game_state.process_fusion_events()
-            # print("[DEBUG] Players after fusion:", list(game_state.players.keys())) # Komen atau hapus ini untuk produksi
-            last_merge_check_time = current_time
-            fusion_happened = True
-            # Segera broadcast state setelah fusion agar client tidak freeze
-            # print("[DEBUG] Players before broadcast:", list(game_state.players.keys())) # Komen atau hapus ini untuk produksi
-            create_and_broadcast_state()
-            last_broadcast_time = current_time
+        game_state.check_for_merge()
+        game_state.process_fusion_events()
 
-        # Broadcast state secara periodik jika tidak ada fusion
-        if not fusion_happened and current_time - last_broadcast_time >= BROADCAST_INTERVAL:
-            # print("[DEBUG] Periodic broadcast. Players:", list(game_state.players.keys())) # Komen atau hapus ini untuk produksi
+        # --- MODIFIKASI KODE UTAMA DI SINI ---
+        # Cek apakah sudah waktunya untuk membuat order baru
+        if current_time - game_state.last_order_spawn_time >= game_state.next_order_spawn_delay:
+            if len(game_state.players) > 0:
+                game_state.generate_orders(len(game_state.players))
+                game_state.last_order_spawn_time = current_time # Reset timer
+                # Hitung delay baru untuk order berikutnya
+                game_state.next_order_spawn_delay = random.uniform(config.ORDER_SPAWN_INTERVAL_MIN, config.ORDER_SPAWN_INTERVAL_MAX)
+                print(f"DEBUG: Next order will spawn in {game_state.next_order_spawn_delay:.2f} seconds.")
+            else:
+                print("DEBUG: No active players, skipping order generation.")
+        # --- AKHIR MODIFIKASI ---
+
+        if current_time - last_broadcast_time >= BROADCAST_INTERVAL:
             create_and_broadcast_state()
             last_broadcast_time = current_time
 

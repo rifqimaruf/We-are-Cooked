@@ -22,7 +22,7 @@ class RecipeManager:
             RecipeManager._initialized = True
             print("RecipeManager initialized and recipes cached.")
         else:
-            print("RecipeManager already initialized. Skipping __init__.")
+            pass
 
     def _load_recipes_to_cache(self):
         conn = sqlite3.connect(self.db_path)
@@ -39,12 +39,16 @@ class RecipeManager:
         for row in cursor.fetchall():
             recipe_id, name, price, level, ingredients_str = row
             ingredients_set = frozenset(ingredients_str.split(','))
+            
+            # Simpan daftar ingredients sebagai bagian dari data resep
             cache[ingredients_set] = {
                 'id': recipe_id,
                 'name': name,
                 'price': price,
-                'level': level
+                'level': level,
+                'ingredients': list(ingredients_set) # Tambahkan ini!
             }
+            
         conn.close()
         return cache
 
@@ -54,13 +58,19 @@ class RecipeManager:
 
     def get_recipes_by_ingredient_count(self, max_ingredients=None):
         if max_ingredients is None:
-            return list(self._recipes_cache.values())
+            # Pastikan ini juga mengembalikan 'ingredients'
+            return [recipe_data.copy() for recipe_data in self._recipes_cache.values()]
         filtered_recipes = []
         for ingredients_set, recipe_data in self._recipes_cache.items():
             if len(ingredients_set) <= max_ingredients:
                 recipe_data_with_ingredients = recipe_data.copy()
-                recipe_data_with_ingredients['ingredients'] = ingredients_set
+                # recipe_data_with_ingredients['ingredients'] sudah ada berkat modifikasi di atas
                 filtered_recipes.append(recipe_data_with_ingredients)
         return filtered_recipes
+
+    def get_all_recipes(self):
+        """Mengembalikan semua resep yang di-cache."""
+        # Mengembalikan list dari values() agar mudah diakses
+        return [recipe_data.copy() for recipe_data in self._recipes_cache.values()]
 
 recipe_manager = RecipeManager()
