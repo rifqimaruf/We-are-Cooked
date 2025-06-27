@@ -112,13 +112,11 @@ def restart_game():
 
     game_state.initialize_stations() # Inisialisasi posisi stasiun
 
-    # --- MODIFIKASI KODE DI SINI ---
     # Generate satu order awal saat game dimulai
     game_state.generate_orders(len(clients_info)) 
     game_state.last_order_spawn_time = time.time() # Reset timer order spawn
     # Inisialisasi delay untuk order berikutnya
     game_state.next_order_spawn_delay = random.uniform(config.ORDER_SPAWN_INTERVAL_MIN, config.ORDER_SPAWN_INTERVAL_MAX)
-    # --- AKHIR MODIFIKASI ---
 
     num_players_connected = len(clients_info)
 
@@ -229,7 +227,7 @@ def handle_client(conn: socket.socket, addr: Any):
                             print(f"Client {player_id} toggled ready. Status: {clients_info[player_id]['ready']}. game_started: {game_started}")
                         elif action == "start_game": 
                             print(f"Client {player_id} sent start_game. All ready: {all(c['ready'] for c in clients_info.values())}. game_started: {game_started}")
-                            if all(c["ready"] for c in clients_info.values()) and len(clients_info) > 0:
+                            if all(c["ready"] for c in clients_info.values()) and len(clients_info) > 1:
                                 restart_game()
                                 continue
                         create_and_broadcast_state() 
@@ -243,7 +241,6 @@ def handle_client(conn: socket.socket, addr: Any):
                                 restart_game()
                                 continue
                             elif action == "change_ingredient":
-                                # --- MODIFIKASI KODE YANG SUDAH ADA DI SINI ---
                                 if game_state.can_player_change_ingredient(player_id):
                                     all_possible_ingredients = ['Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
                                         'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe']
@@ -257,7 +254,7 @@ def handle_client(conn: socket.socket, addr: Any):
                                             add_game_event("ingredient_change", {"player_id": player_id, "old_ingredient": old_ing, "new_ingredient": new_ing}) # Opsional: event visual
                                 else:
                                     print(f"Player {player_id} tried to change ingredient but not on Enter Station.")
-                                # --- AKHIR MODIFIKASI ---
+
             except socket.timeout:
                 pass 
             except (json.JSONDecodeError, struct.error) as e:
@@ -291,8 +288,6 @@ def game_timer_thread():
         game_state.check_for_merge()
         game_state.process_fusion_events()
 
-        # --- MODIFIKASI KODE UTAMA DI SINI ---
-        # Cek apakah sudah waktunya untuk membuat order baru
         if current_time - game_state.last_order_spawn_time >= game_state.next_order_spawn_delay:
             if len(game_state.players) > 0:
                 game_state.generate_orders(len(game_state.players))
@@ -302,7 +297,6 @@ def game_timer_thread():
                 print(f"DEBUG: Next order will spawn in {game_state.next_order_spawn_delay:.2f} seconds.")
             else:
                 print("DEBUG: No active players, skipping order generation.")
-        # --- AKHIR MODIFIKASI ---
 
         if current_time - last_broadcast_time >= BROADCAST_INTERVAL:
             create_and_broadcast_state()
