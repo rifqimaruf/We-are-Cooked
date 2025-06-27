@@ -14,7 +14,7 @@ def main():
     pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
 
     screen = pygame.display.set_mode((config.GRID_WIDTH * 50, (config.GRID_HEIGHT * 50) + 60))
-    pygame.display.set_caption("We are Cooked (Modular)")
+    pygame.display.set_caption("We are Cooked")
     clock = pygame.time.Clock()
     
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
