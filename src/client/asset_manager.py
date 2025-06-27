@@ -1,4 +1,3 @@
-# src/client/asset_manager.py
 import pygame
 import os
 from .visual_assets import SoundManager

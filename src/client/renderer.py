@@ -1,4 +1,3 @@
-# src/client/renderer.py
 import pygame
 from src.shared import config
 

@@ -1,4 +1,3 @@
-# src/client/visual_assets.py
 import pygame
 import os
 

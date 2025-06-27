@@ -1,4 +1,3 @@
-# src/client/client.py
 import pygame
 import sys
 import os
