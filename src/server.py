@@ -65,9 +65,12 @@ def restart_game():
                 addr = conn.getpeername()
                 player_id = str(addr)
                 if player_id in clients_info:
+                    # ingredient = random.choice([
+                    #     'Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
+                    #     'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe'
+                    # ])
                     ingredient = random.choice([
-                        'Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
-                        'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe'
+                        'Salmon', 'Tuna', 'Shrimp', 'Crab Meat'                    
                     ])
                     pos = (random.randint(0, config.GRID_WIDTH - 1), random.randint(0, config.GRID_HEIGHT - 1))
                     game_state.add_player(player_id, ingredient, pos)
@@ -139,7 +142,7 @@ def handle_client(conn, addr):
             elif msg.get("action") == "start_game" and not game_started:
                 # Check if all players are ready
                 all_ready = all(client["ready"] for client in clients_info.values())
-                print(f"Start game requested by {player_id}. All players ready: {all_ready}")
+                print(f"Start game requested by {player_id}. All players ready: {all_ready}")                
                 if all_ready and len(clients_info) > 0:
                     restart_game()
             
@@ -149,11 +152,14 @@ def handle_client(conn, addr):
                 
             elif msg.get("action") == "move" and game_started:
                 direction = msg["direction"]
-                game_state.move_player(player_id, direction)
-
-                fusion_result = game_state.check_for_merge()
-                if fusion_result:
-                    print(f"Fusion at {fusion_result['pos']}: {fusion_result['fusion']['name']} served!")
+                single_player_merge = game_state.move_player(player_id, direction)
+                
+                if single_player_merge:
+                    print(f"Single player fusion detected: {single_player_merge['fusion']['name']} served!")
+                else:
+                    fusion_result = game_state.check_for_merge()
+                    if fusion_result:
+                        print(f"Fusion at {fusion_result['pos']}: {fusion_result['fusion']['name']} served!")
 
                 broadcast_state()
             
