@@ -1,6 +1,6 @@
 # 🍣 We are Cooked
 
-This is a multiplayer cooking game inspired by games like "Overcooked" but with a focus on sushi preparation. The game is built using Python with Pygame for the client interface and uses socket programming for network communication.  
+This is a multiplayer cooking game inspired by games like "Overcooked" but with a focus on sushi preparation. The game is built using Python with Pygame for the client interface and supports both socket programming and HTTP for network communication.
 
 ## 🍥 Gameplay
 
@@ -28,18 +28,33 @@ Make sure you have Python installed with the required packages
 pip install -r requirements.txt
 ```
 
-### Server
+### Socket-Based Version
+#### Server
 Run this command to initialize the server before turning on any client instance.
 ```sh
 python -m src.server.server
 ```
 
-
-### Client
+#### Client
 Running this command will start up an individual client.
 ```sh
 python -m src.client.client
 ```
+
+### HTTP-Based Version
+#### Server
+Run this command to initialize the HTTP server.
+```sh
+python -m src.server.http_server_main
+```
+
+#### Client
+Running this command will start up an HTTP-based client.
+```sh
+python -m src.client.http_client_main
+```
+
+For more details on the HTTP implementation, see [HTTP_IMPLEMENTATION.md](HTTP_IMPLEMENTATION.md).
 
 ## 🔧 Technical Breakdown (For Contributions)
 1. Network Architecture:
