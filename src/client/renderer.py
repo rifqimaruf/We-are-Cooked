@@ -13,6 +13,7 @@ class Renderer:
         self.tile_size = 50
         self.interpolated_player_positions = {}
         self.ui_rects = {}
+        self.show_almanac = False 
 
     def format_time(self, seconds):
         seconds = int(seconds); minutes = seconds // 60; seconds = seconds % 60
@@ -404,6 +405,166 @@ class Renderer:
             (255, 215, 0), (255, 180, 0), (255, 140, 0)  
         ])
 
+    def _draw_almanac(self):
+        """Draw the almanac overlay with game information"""
+        overlay = pygame.Surface((self.screen_width, self.screen_height))
+        overlay.set_alpha(180)
+        overlay.fill((0, 0, 0))
+        self.screen.blit(overlay, (0, 0))
+        
+        almanac_width = min(800, self.screen_width - 60)
+        almanac_height = min(600, self.screen_height - 60)
+        almanac_rect = pygame.Rect(0, 0, almanac_width, almanac_height)
+        almanac_rect.center = (self.screen_width // 2, self.screen_height // 2)
+        
+        pygame.draw.rect(self.screen, (40, 40, 60), almanac_rect, border_radius=15)
+        pygame.draw.rect(self.screen, (200, 200, 200), almanac_rect, 3, border_radius=15)
+        
+        title_font = self.assets.get_font('default_48')
+        title_text = title_font.render("FOLLOW THE RADIANT PATH TO VICTORY!", True, (255, 255, 255))
+        title_rect = title_text.get_rect(centerx=almanac_rect.centerx, top=almanac_rect.top + 20)
+        self.screen.blit(title_text, title_rect)
+        
+        close_button_size = 30
+        close_x = almanac_rect.right - close_button_size - 10
+        close_y = almanac_rect.top + 10
+        self.ui_rects['almanac_close'] = pygame.Rect(close_x, close_y, close_button_size, close_button_size)
+        pygame.draw.rect(self.screen, (200, 50, 50), self.ui_rects['almanac_close'], border_radius=5)
+        close_font = self.assets.get_font('default_24')
+        close_text = close_font.render("X", True, (255, 255, 255))
+        close_text_rect = close_text.get_rect(center=self.ui_rects['almanac_close'].center)
+        self.screen.blit(close_text, close_text_rect)
+        
+        content_y = title_rect.bottom + 20
+        content_height = almanac_rect.bottom - content_y - 20
+        
+        self._draw_almanac_stations(almanac_rect, content_y, content_height // 2)
+        
+        ingredients_y = content_y + content_height // 2
+        self._draw_almanac_ingredients(almanac_rect, ingredients_y, content_height // 2)
+
+    def _draw_almanac_stations(self, almanac_rect, start_y, height):
+        """Draw the stations section of the almanac"""
+        section_font = self.assets.get_font('default_32')
+        desc_font = self.assets.get_font('default_18')
+        
+        stations_title = section_font.render("Stations", True, (255, 255, 100))
+        stations_title_rect = stations_title.get_rect(centerx=almanac_rect.centerx, top=start_y)
+        self.screen.blit(stations_title, stations_title_rect)
+        
+        stations_data = [
+            {
+                'name': 'Fusion Stations',
+                'image': 'stove',
+                'description': 'Combine ingredients to create recipes.\nStand near with required ingredient.'
+            },
+            {
+                'name': 'Fridge Station', 
+                'image': 'fridge',
+                'description': 'Change your current ingredient.\nPress ENTER when standing on it.'
+            },
+            {
+                'name': 'Doorprize Station',
+                'image': 'treasure', 
+                'description': 'Collect bonus points when it appears.\nLimited time, hurry!'
+            }
+        ]
+        
+        station_y = stations_title_rect.bottom + 10
+        station_width = (almanac_rect.width - 60) // 3
+        station_height = height - 40
+        
+        for i, station in enumerate(stations_data):
+            station_x = almanac_rect.left + 20 + i * (station_width + 10)
+            station_rect = pygame.Rect(station_x, station_y, station_width, station_height)
+            
+            pygame.draw.rect(self.screen, (60, 60, 80), station_rect, border_radius=8)
+            pygame.draw.rect(self.screen, (150, 150, 150), station_rect, 2, border_radius=8)
+            
+            station_image = self.assets.get_image(station['image'])
+            if station_image:
+                image_size = min(station_width - 20, 60)
+                scaled_image = pygame.transform.scale(station_image, (image_size, image_size))
+                image_rect = scaled_image.get_rect(centerx=station_rect.centerx, top=station_rect.top + 10)
+                self.screen.blit(scaled_image, image_rect)
+                text_start_y = image_rect.bottom + 10
+            else:
+                text_start_y = station_rect.top + 10
+            
+            name_text = self.assets.get_font('default_24').render(station['name'], True, (255, 255, 255))
+            name_rect = name_text.get_rect(centerx=station_rect.centerx, top=text_start_y)
+            self.screen.blit(name_text, name_rect)
+            
+            desc_lines = station['description'].split('\n')
+            line_y = name_rect.bottom + 8
+            for line in desc_lines:
+                if line_y + 20 < station_rect.bottom:
+                    line_text = desc_font.render(line, True, (200, 200, 200))
+                    line_rect = line_text.get_rect(centerx=station_rect.centerx, top=line_y)
+                    self.screen.blit(line_text, line_rect)
+                    line_y += 22
+
+    def _draw_almanac_ingredients(self, almanac_rect, start_y, height):
+        """Draw the ingredients section of the almanac"""
+        section_font = self.assets.get_font('default_32')
+        
+        ingredients_title = section_font.render("Available Ingredients", True, (255, 255, 100))
+        ingredients_title_rect = ingredients_title.get_rect(centerx=almanac_rect.centerx, top=start_y)
+        self.screen.blit(ingredients_title, ingredients_title_rect)
+        
+        content_start_y = ingredients_title_rect.bottom + 10
+        content_height = height - (content_start_y - start_y) - 20
+        
+        ingredients_rect = pygame.Rect(almanac_rect.left + 10, content_start_y, almanac_rect.width - 20, content_height)
+        pygame.draw.rect(self.screen, (50, 50, 70), ingredients_rect, border_radius=8)
+        pygame.draw.rect(self.screen, (120, 120, 120), ingredients_rect, 1, border_radius=8)
+        
+        ingredients = [
+            'Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
+            'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe'
+        ]
+        
+        grid_start_y = ingredients_rect.top + 10
+        grid_available_height = ingredients_rect.height - 20
+        
+        cols = 6 
+        rows = 2
+        item_width = (ingredients_rect.width - 20) // cols
+        item_height = grid_available_height // rows
+        
+        for i, ingredient in enumerate(ingredients):
+            if i >= cols * rows:
+                break
+                
+            col = i % cols
+            row = i // cols
+            
+            item_x = ingredients_rect.left + 10 + col * item_width
+            item_y = grid_start_y + row * item_height
+            item_rect = pygame.Rect(item_x, item_y, item_width - 5, item_height - 5)
+            
+            glow_colors = self._get_ingredient_glow_colors(ingredient)
+            bg_color = (*glow_colors[0][:3], 30)
+            item_bg = pygame.Surface((item_rect.width, item_rect.height), pygame.SRCALPHA)
+            pygame.draw.rect(item_bg, bg_color, item_bg.get_rect(), border_radius=5)
+            self.screen.blit(item_bg, item_rect.topleft)
+            pygame.draw.rect(self.screen, glow_colors[0][:3], item_rect, 1, border_radius=5)
+            
+            sprite = self.assets.get_sprite(ingredient)
+            if sprite:
+                sprite_size = min(item_width - 20, item_height - 25, 40) 
+                scaled_sprite = pygame.transform.scale(sprite, (sprite_size, sprite_size))
+                sprite_rect = scaled_sprite.get_rect(centerx=item_rect.centerx, top=item_rect.top + 5)
+                self.screen.blit(scaled_sprite, sprite_rect)
+                text_y = sprite_rect.bottom + 3
+            else:
+                text_y = item_rect.top + 10
+            
+            name_font = self.assets.get_font('default_18')
+            name_text = name_font.render(ingredient, True, (255, 255, 255))
+            name_rect = name_text.get_rect(centerx=item_rect.centerx, top=text_y)
+            self.screen.blit(name_text, name_rect)
+
     def _draw_ui(self, state_data):
         ui_area = pygame.Rect(0, self.screen_height - self.ui_height, self.screen_width, self.ui_height)
         pygame.draw.rect(self.screen, (50, 50, 50), ui_area)
@@ -486,6 +647,11 @@ class Renderer:
 
         self.ui_rects['ready_button'] = self._draw_button((self.screen_width // 4, self.screen_height * 3 // 4), "Cancel" if is_ready else "Ready", (200, 50))
         self.ui_rects['start_button'] = self._draw_button((self.screen_width * 3 // 4, self.screen_height * 3 // 4), "Start Game", (200, 50), enabled=all_ready)
+        
+        self.ui_rects['almanac_button'] = self._draw_button((self.screen_width // 2, self.screen_height * 3 // 4 + 70), "Almanac", (150, 40))
+        
+        if self.show_almanac:
+            self._draw_almanac()
         
     def draw_end_screen(self, game_manager):
         from src.shared import config

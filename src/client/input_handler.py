@@ -25,6 +25,14 @@ class InputHandler:
                            len(game_manager.current_state.get("clients_info", {})) > 0:
                             actions.append({'type': 'network', 'data': {'action': 'start_game'}})
                             actions.append({'type': 'sfx', 'name': 'Splash Sound'})
+                    
+                    if ui_rects.get('almanac_button') and ui_rects['almanac_button'].collidepoint(event.pos):
+                        actions.append({'type': 'toggle_almanac'})
+                        actions.append({'type': 'sfx', 'name': 'Splash Sound'})
+                    
+                    if ui_rects.get('almanac_close') and ui_rects['almanac_close'].collidepoint(event.pos):
+                        actions.append({'type': 'close_almanac'})
+                        actions.append({'type': 'sfx', 'name': 'Splash Sound'})
 
             elif state == config.GAME_STATE_PLAYING:
                 if event.type == pygame.MOUSEBUTTONDOWN:

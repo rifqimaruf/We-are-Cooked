@@ -50,6 +50,10 @@ def main():
                 network_handler.send_action(action['data'])
             elif action['type'] == 'sfx':
                 asset_manager.sound_manager.play_sfx(action['name'])
+            elif action['type'] == 'toggle_almanac':
+                renderer.show_almanac = not renderer.show_almanac
+            elif action['type'] == 'close_almanac':
+                renderer.show_almanac = False
 
         game_manager.check_state_transitions(asset_manager)
         game_manager.check_game_events(asset_manager)
