@@ -53,7 +53,7 @@ class AssetManager:
                 start_image = pygame.image.load(start_jpg_path).convert()
                 self.images['start_bg'] = start_image
                 self.images['end_bg'] = start_image  
-                print(f"Loaded background: start.jpg (used for both start and end screens)")
+                print(f"Loaded background: start.jpg (used for start and default end screens)")
             else:
                 self.images['start_bg'] = None
                 self.images['end_bg'] = None
@@ -62,6 +62,30 @@ class AssetManager:
             print(f"Warning: Could not load start.jpg: {e}")
             self.images['start_bg'] = None
             self.images['end_bg'] = None
+        
+        try:
+            win_bg_path = os.path.join(self.base_path, 'images', 'end_win.jpg')
+            if os.path.exists(win_bg_path):
+                self.images['end_win_bg'] = pygame.image.load(win_bg_path).convert()
+                print(f"Loaded background: end_win.jpg")
+            else:
+                self.images['end_win_bg'] = None
+                print(f"Info: end_win.jpg not found - will use fallback for win screen")
+        except pygame.error as e:
+            print(f"Warning: Could not load end_win.jpg: {e}")
+            self.images['end_win_bg'] = None
+        
+        try:
+            lose_bg_path = os.path.join(self.base_path, 'images', 'end_lose.jpg')
+            if os.path.exists(lose_bg_path):
+                self.images['end_lose_bg'] = pygame.image.load(lose_bg_path).convert()
+                print(f"Loaded background: end_lose.jpg")
+            else:
+                self.images['end_lose_bg'] = None
+                print(f"Info: end_lose.jpg not found - will use fallback for lose screen")
+        except pygame.error as e:
+            print(f"Warning: Could not load end_lose.jpg: {e}")
+            self.images['end_lose_bg'] = None
         
         try:
             game_bg_path = os.path.join(self.base_path, 'images', 'game_bg.png')

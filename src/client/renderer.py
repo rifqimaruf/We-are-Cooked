@@ -237,22 +237,63 @@ class Renderer:
         self.ui_rects['start_button'] = self._draw_button((self.screen_width * 3 // 4, self.screen_height * 3 // 4), "Start Game", (200, 50), enabled=all_ready)
         
     def draw_end_screen(self, game_manager):
-        bg_image = self.assets.get_image('end_bg')
-        if bg_image:
-            self.screen.blit(pygame.transform.scale(bg_image, self.screen.get_size()), (0, 0))
-        else:
-            self.screen.fill((255, 255, 255)) 
+        from src.shared import config
         
-        score_y_pos = self.screen_height * 0.60
+        final_score = game_manager.final_score
+        is_win = final_score >= config.WIN_SCORE_THRESHOLD
+        
+        if is_win:
+            bg_image = self.assets.get_image('end_win_bg')
+            if not bg_image:
+                bg_image = self.assets.get_image('end_bg')  
+        else:
+            bg_image = self.assets.get_image('end_lose_bg')
+            if not bg_image:
+                bg_image = self.assets.get_image('end_bg') 
+        
 
+        if bg_image:
+            scaled_bg = pygame.transform.scale(bg_image, (self.screen_width, self.screen_height))
+            self.screen.blit(scaled_bg, (0, 0))
+        else:
+            fallback_color = (50, 100, 50) if is_win else (100, 50, 50) 
+            self.screen.fill(fallback_color)
+        
+        overlay_surface = pygame.Surface((self.screen_width, 200))
+        overlay_surface.set_alpha(128)  
+        overlay_surface.fill((0, 0, 0))
+        overlay_rect = overlay_surface.get_rect(center=(self.screen_width // 2, self.screen_height // 2))
+        self.screen.blit(overlay_surface, overlay_rect)
+        
+        result_y_pos = self.screen_height * 0.35
+        result_font = self.assets.get_font('default_72')
+        if is_win:
+            result_text = "MISSION COMPLETED!"
+            result_color = (255, 215, 0) 
+        else:
+            result_text = "MISSION FAILED!"
+            result_color = (255, 100, 100)  
+        
+        result_surface = result_font.render(result_text, True, result_color)
+        result_rect = result_surface.get_rect(center=(self.screen_width // 2, result_y_pos))
+        self.screen.blit(result_surface, result_rect)
+        
+        score_y_pos = self.screen_height * 0.50
         score_font = self.assets.get_font('default_48')
         if score_font:
-            score_text_surface = score_font.render(f"Final Score: {game_manager.final_score}", True, (0, 0, 0)) 
+            score_text_surface = score_font.render(f"Final Score: {final_score:,}", True, (255, 255, 255))
             score_rect = score_text_surface.get_rect(center=(self.screen_width // 2, score_y_pos))
             self.screen.blit(score_text_surface, score_rect)
+        
+        threshold_y_pos = self.screen_height * 0.58
+        threshold_font = self.assets.get_font('default_28')
+        threshold_text = f"Target: {config.WIN_SCORE_THRESHOLD:,}"
+        threshold_color = (200, 200, 200)
+        threshold_surface = threshold_font.render(threshold_text, True, threshold_color)
+        threshold_rect = threshold_surface.get_rect(center=(self.screen_width // 2, threshold_y_pos))
+        self.screen.blit(threshold_surface, threshold_rect)
 
-        button_y_pos = score_y_pos + 80 
-
+        button_y_pos = self.screen_height * 0.75
         self.ui_rects['play_again_button'] = self._draw_button(
             center_pos=(self.screen_width // 2, button_y_pos), 
             text="Play Again", 

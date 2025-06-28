@@ -31,4 +31,11 @@ DOORPRIZE_SCORE_MAX = 10000
 # Post-Fusion Settings
 POST_FUSION_RELOCATION = True  # Temporary disable
 POST_FUSION_INGREDIENT_CHANGE = True  # Temporary disable
-FUSION_NEEDED_INGREDIENT_PRIORITY = 0.5  
+FUSION_NEEDED_INGREDIENT_PRIORITY = 0.5
+
+# Win/Lose System
+WIN_SCORE_THRESHOLD = 200000
+WIN_BACKGROUND_IMAGE = "end_win.jpg"
+WIN_SOUND = "Mission Complete.mp3"
+LOSE_BACKGROUND_IMAGE = "end_lose.jpg"
+LOSE_SOUND = "Mission Failed.mp3"  
