@@ -34,7 +34,11 @@ class GameManager:
                 self.game_screen_state = config.GAME_STATE_END_SCREEN
                 self.final_score = self.current_state.get("score", 0)
                 asset_manager.sound_manager.stop_music()
-                asset_manager.sound_manager.play_sfx("Mission Complete")
+                
+                if self.final_score >= config.WIN_SCORE_THRESHOLD:
+                    asset_manager.sound_manager.play_sfx(config.WIN_SOUND)
+                else:
+                    asset_manager.sound_manager.play_sfx(config.LOSE_SOUND)
         elif not is_game_started:
             self.game_screen_state = config.GAME_STATE_START_SCREEN
             asset_manager.sound_manager.stop_music()
