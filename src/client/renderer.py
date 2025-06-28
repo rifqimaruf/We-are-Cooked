@@ -131,19 +131,76 @@ class Renderer:
             pygame.draw.rect(self.screen, (0, 0, 0, 128), text_bg_rect, border_radius=3)
             self.screen.blit(text_surface, text_rect)
 
-        # Draw Enter Station
         enter_station = state_data.get("enter_station")
         if enter_station:
             sx, sy = enter_station
-            for row in range(config.STATION_SIZE):
-                for col in range(config.STATION_SIZE):
-                    rect = pygame.Rect((sx + col) * self.tile_size, (sy + row) * self.tile_size, self.tile_size, self.tile_size)
-                    pygame.draw.rect(self.screen, (150, 255, 150, 100), rect) 
-                    pygame.draw.rect(self.screen, (0, 200, 0), rect, 2) 
+            
+            fridge_image = self.assets.get_image('fridge')
+            
+            station_rect = pygame.Rect(sx * self.tile_size, sy * self.tile_size, 
+                                     config.STATION_SIZE * self.tile_size, 
+                                     config.STATION_SIZE * self.tile_size)
+            
+            glow_time = time.time() * 2.0  
+            glow_intensity = (math.sin(glow_time) + 1) / 2  
+            
+            pulse_time = time.time() * 3.5 
+            pulse_intensity = (math.sin(pulse_time) + 1) / 2
+            
+            base_alpha = 40 + int(55 * glow_intensity)
+            glow_colors = [
+                (0, 150, 255, max(25, int(base_alpha * 0.5))),     
+                (0, 200, 255, max(35, int(base_alpha * 0.7))),     
+                (100, 220, 255, max(45, int(base_alpha * 0.9))),   
+                (150, 255, 255, max(30, int(base_alpha * 0.6 * pulse_intensity))) 
+            ]
+            
+            glow_offsets = [20, 15, 10, 5]  
+            
+            for glow_color, offset in zip(glow_colors, glow_offsets):
+                glow_rect = station_rect.inflate(offset * 2, offset * 2)
+                glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
+                pygame.draw.rect(glow_surface, glow_color, glow_surface.get_rect(), border_radius=offset//2 + 8)
+                self.screen.blit(glow_surface, glow_rect.topleft)
+            
+            frost_time = time.time() * 4 + sx * 2 + sy
+            for frost_idx in range(8):
+                angle = frost_time + frost_idx * (math.pi / 4)  
+                frost_distance = 25 + 8 * math.sin(frost_time * 1.5)
+                frost_x = station_rect.centerx + math.cos(angle) * frost_distance
+                frost_y = station_rect.centery + math.sin(angle) * frost_distance
+                
+                frost_alpha = int(120 * (math.sin(frost_time * 3 + frost_idx) + 1) / 2)
+                frost_size = 2 + int(2 * (math.sin(frost_time * 3.5 + frost_idx) + 1) / 2)
+                
+                frost_color = (150 + int(50 * glow_intensity), 255, 255, frost_alpha)
+                frost_surface = pygame.Surface((frost_size * 2, frost_size * 2), pygame.SRCALPHA)
+                pygame.draw.circle(frost_surface, frost_color, (frost_size, frost_size), frost_size)
+                self.screen.blit(frost_surface, (frost_x - frost_size, frost_y - frost_size))
+            
+            if fridge_image:
+                self.screen.blit(fridge_image, station_rect)
+                
+                shimmer_alpha = int(25 * glow_intensity)
+                shimmer_surface = pygame.Surface(station_rect.size, pygame.SRCALPHA)
+                shimmer_color = (100, 200, 255, shimmer_alpha)
+                pygame.draw.rect(shimmer_surface, shimmer_color, shimmer_surface.get_rect(), border_radius=8)
+                self.screen.blit(shimmer_surface, station_rect.topleft)
+            else:
+                for row in range(config.STATION_SIZE):
+                    for col in range(config.STATION_SIZE):
+                        rect = pygame.Rect((sx + col) * self.tile_size, (sy + row) * self.tile_size, self.tile_size, self.tile_size)
+                        pygame.draw.rect(self.screen, (150, 255, 150, 100), rect) 
+                        pygame.draw.rect(self.screen, (0, 200, 0), rect, 2) 
             
             font = self.assets.get_font('default_18')
-            text_surface = font.render("Enter", True, (50, 50, 50))
-            text_rect = text_surface.get_rect(topleft=(sx * self.tile_size + 5, sy * self.tile_size + 5))
+            text_surface = font.render("Fridge", True, (255, 255, 255))
+            text_rect = text_surface.get_rect(center=(
+                (sx + config.STATION_SIZE/2) * self.tile_size, 
+                (sy + config.STATION_SIZE - 0.2) * self.tile_size
+            ))
+            text_bg_rect = text_rect.inflate(6, 2)
+            pygame.draw.rect(self.screen, (0, 0, 0, 120), text_bg_rect, border_radius=3)
             self.screen.blit(text_surface, text_rect)
 
     def _draw_doorprize_station(self, state_data):

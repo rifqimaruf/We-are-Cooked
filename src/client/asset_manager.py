@@ -124,6 +124,20 @@ class AssetManager:
         except pygame.error as e:
             print(f"Warning: Could not load treasure.png: {e}")
             self.images['treasure'] = None
+        
+        try:
+            fridge_path = os.path.join(self.base_path, 'images', 'fridge.png')
+            if os.path.exists(fridge_path):
+                fridge_image = pygame.image.load(fridge_path).convert_alpha()
+                fridge_size = (self.tile_size * 2, self.tile_size * 2)
+                self.images['fridge'] = pygame.transform.scale(fridge_image, fridge_size)
+                print(f"Loaded station image: fridge.png")
+            else:
+                self.images['fridge'] = None
+                print(f"Warning: fridge.png not found at {fridge_path}")
+        except pygame.error as e:
+            print(f"Warning: Could not load fridge.png: {e}")
+            self.images['fridge'] = None
 
     def _load_fonts(self):
         self.fonts['default_72'] = pygame.font.SysFont(None, 72)
