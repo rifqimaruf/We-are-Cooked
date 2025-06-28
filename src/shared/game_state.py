@@ -33,7 +33,10 @@ class GameState:
         self.players_collected_doorprize = set() # Set of player_ids who collected from current doorprize
 
         self.last_order_spawn_time = time.time()
-
+        
+        # Tambahan untuk post-fusion handling
+        self.all_possible_ingredients = ['Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed', 
+                                       'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe']
 
     def add_player(self, player_id, ingredient, pos):
         with self._lock:
@@ -230,6 +233,11 @@ class GameState:
                 order_name_fulfilled = event['order_name_fulfilled']
                 self.score += recipe["price"]
                 print(f"Processing Fusion: {recipe['name']} served! +{recipe['price']} cuan at {pos}")
+                
+                # Pindahkan semua player yang terlibat fusion dan ubah ingredient mereka
+                for player_id in players_involved:
+                    self._relocate_and_change_ingredient(player_id)
+                
                 for order_obj in self.orders:
                     if order_obj['name'] == order_name_fulfilled:
                         order_obj['fulfilled'] = True
@@ -308,3 +316,101 @@ class GameState:
                 "fulfilled": False
             })
             print(f"DEBUG: Added 1 new order: {selected_recipe['name']}. Total orders: {len(self.orders)}")
+
+    def _get_safe_spawn_position(self):
+        max_attempts = 50
+        for _ in range(max_attempts):
+            x = random.randint(1, config.GRID_WIDTH - 2)
+            y = random.randint(1, config.GRID_HEIGHT - 2)
+
+            is_safe = True
+            
+            # Cek fusion stations
+            for station_pos in self.fusion_stations:
+                sx, sy = station_pos
+                if (sx <= x < sx + config.STATION_SIZE and 
+                    sy <= y < sy + config.STATION_SIZE):
+                    is_safe = False
+                    break
+            
+            # Cek enter station
+            if is_safe and self.enter_station:
+                sx, sy = self.enter_station
+                if (sx <= x < sx + config.STATION_SIZE and 
+                    sy <= y < sy + config.STATION_SIZE):
+                    is_safe = False
+            
+            # Cek doorprize station
+            if is_safe and self.doorprize_station:
+                sx, sy = self.doorprize_station
+                if (sx <= x < sx + config.STATION_SIZE and 
+                    sy <= y < sy + config.STATION_SIZE):
+                    is_safe = False
+            
+            if is_safe:
+                return (float(x), float(y))
+        
+        # Fallback jika tidak menemukan posisi aman
+        return (1.0, 1.0)
+
+    def _relocate_and_change_ingredient(self, player_id):
+        try:
+            player = self.players.get(player_id)
+            if not player:
+                print(f"WARNING: Player {player_id} not found for relocation")
+                return
+            
+            old_ingredient = player.ingredient
+            old_pos = player.pos
+            print(f"Starting relocation for player {player_id} from {old_pos} with ingredient {old_ingredient}")
+            
+            if config.POST_FUSION_RELOCATION:
+                new_pos = self._get_safe_spawn_position()
+                player.pos = new_pos
+                player.target_pos = new_pos
+                print(f"Player {player_id} relocated to {new_pos}")
+            else:
+                new_pos = old_pos
+                print(f"Player {player_id} staying at {old_pos} (relocation disabled)")
+            
+            if config.POST_FUSION_INGREDIENT_CHANGE:
+                available_ingredients = [ing for ing in self.all_possible_ingredients if ing != old_ingredient]
+                
+                needed_ingredients = []
+                for order in self.orders:
+                    if not order.get('fulfilled', False):
+                        needed_ingredients.extend(order.get('ingredients', []))
+                
+                # Pilih ingredient berdasarkan prioritas dari config
+                if needed_ingredients and random.random() < config.FUSION_NEEDED_INGREDIENT_PRIORITY:
+                    filtered_needed = [ing for ing in needed_ingredients if ing != old_ingredient and ing in available_ingredients]
+                    if filtered_needed:
+                        new_ingredient = random.choice(filtered_needed)
+                    else:
+                        new_ingredient = random.choice(available_ingredients)
+                else:
+                    new_ingredient = random.choice(available_ingredients)
+                
+                player.ingredient = new_ingredient
+                print(f"Player {player_id} ingredient changed from {old_ingredient} to {new_ingredient}")
+            else:
+                new_ingredient = old_ingredient
+                print(f"Player {player_id} keeping ingredient {old_ingredient} (ingredient change disabled)")
+            
+            # Tambahkan visual event untuk relocation
+            self._visual_events.append({
+                "type": "player_relocate", 
+                "data": {
+                    "player_id": player_id, 
+                    "old_pos": old_pos,
+                    "new_pos": new_pos,
+                    "old_ingredient": old_ingredient,
+                    "new_ingredient": new_ingredient
+                }
+            })
+            
+            print(f"Successfully completed relocation for player {player_id}")
+        except Exception as e:
+            print(f"ERROR in _relocate_and_change_ingredient for player {player_id}: {e}")
+            import traceback
+            traceback.print_exc()

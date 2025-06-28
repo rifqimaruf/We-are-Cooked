@@ -64,6 +64,8 @@ class GameManager:
                     elif event["type"] == "doorprize_expire":
                         # Mungkin tidak perlu SFX khusus untuk expire, atau SFX yang lebih lembut
                         self._processed_event_ids.add(event["id"])
+                    elif event["type"] == "player_relocate":
+                        self._processed_event_ids.add(event["id"])
 
     def handle_disconnect(self):
         print("Disconnected from server.")
