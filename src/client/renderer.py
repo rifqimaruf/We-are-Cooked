@@ -312,25 +312,97 @@ class Renderer:
         
         rect = pygame.Rect(interpolated_x * self.tile_size, interpolated_y * self.tile_size, self.tile_size, self.tile_size)
         
-        sprite = self.assets.get_sprite(player_data["ingredient"])
+        ingredient_name = player_data["ingredient"]
+        glow_colors = self._get_ingredient_glow_colors(ingredient_name)
+        
+        glow_time = time.time() * 3.0 + hash(player_id) % 100  
+        glow_intensity = (math.sin(glow_time) + 1) / 2
+        
+        pulse_time = time.time() * 4.5 + hash(player_id) % 50
+        pulse_intensity = (math.sin(pulse_time) + 1) / 2
+        
+        base_alpha = 25 + int(35 * glow_intensity)
+        glow_offsets = [12, 8, 4] 
+        
+        for i, offset in enumerate(glow_offsets):
+            glow_rect = rect.inflate(offset * 2, offset * 2)
+            glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
+            
+            alpha_multiplier = (1.0 - i * 0.2) * (0.6 + 0.4 * pulse_intensity)
+            glow_color = (*glow_colors[i % len(glow_colors)][:3], max(15, int(base_alpha * alpha_multiplier)))
+            
+            pygame.draw.ellipse(glow_surface, glow_color, glow_surface.get_rect())
+            self.screen.blit(glow_surface, glow_rect.topleft)
+        
+        sparkle_time = time.time() * 5 + hash(player_id) % 30
+        for sparkle_idx in range(3):  
+            angle = sparkle_time + sparkle_idx * (math.pi * 2 / 3)
+            sparkle_distance = 15 + 5 * math.sin(sparkle_time * 2)
+            sparkle_x = rect.centerx + math.cos(angle) * sparkle_distance
+            sparkle_y = rect.centery + math.sin(angle) * sparkle_distance
+            
+            sparkle_alpha = int(120 * (math.sin(sparkle_time * 3 + sparkle_idx) + 1) / 2)
+            sparkle_size = 1 + int(2 * (math.sin(sparkle_time * 4 + sparkle_idx) + 1) / 2)
+            
+            sparkle_color = (*glow_colors[0][:3], sparkle_alpha)
+            sparkle_surface = pygame.Surface((sparkle_size * 2, sparkle_size * 2), pygame.SRCALPHA)
+            pygame.draw.circle(sparkle_surface, sparkle_color, (sparkle_size, sparkle_size), sparkle_size)
+            self.screen.blit(sparkle_surface, (sparkle_x - sparkle_size, sparkle_y - sparkle_size))
+        
+        sprite = self.assets.get_sprite(ingredient_name)
         if sprite:
             sprite_rect = sprite.get_rect(center=rect.center)
             self.screen.blit(sprite, sprite_rect)
+            
+            shimmer_alpha = int(20 * glow_intensity)
+            shimmer_surface = pygame.Surface(sprite_rect.size, pygame.SRCALPHA)
+            shimmer_color = (*glow_colors[0][:3], shimmer_alpha)
+            pygame.draw.rect(shimmer_surface, shimmer_color, shimmer_surface.get_rect(), border_radius=4)
+            self.screen.blit(shimmer_surface, sprite_rect.topleft)
         else:
-            #  print(f"[WARNING] Sprite for ingredient '{player_data['ingredient']}' not found.")
+            #  print(f"[WARNING] Sprite for ingredient '{ingredient_name}' not found.")
             pygame.draw.rect(self.screen, (200, 100, 100), rect) 
         
         if player_id == local_client_id:
-            pygame.draw.rect(self.screen, (0, 150, 255, 150), rect, 3)
+            border_glow_alpha = int(100 + 50 * glow_intensity)
+            border_color = (0, 150, 255, border_glow_alpha)
+            border_surface = pygame.Surface((rect.width + 6, rect.height + 6), pygame.SRCALPHA)
+            pygame.draw.rect(border_surface, border_color, border_surface.get_rect(), 3, border_radius=3)
+            self.screen.blit(border_surface, (rect.x - 3, rect.y - 3))
         else:
             pygame.draw.rect(self.screen, (0, 200, 0, 150), rect, 2)
         
-        ingredient_name = player_data["ingredient"]
         font = self.assets.get_font('default_18')
-        text_surface = font.render(ingredient_name, True, (0, 0, 0))
+        text_surface = font.render(ingredient_name, True, (255, 255, 255))
+        text_rect = text_surface.get_rect(center=(rect.centerx, rect.bottom + 10))
         
-        text_rect = text_surface.get_rect(center=(rect.centerx, rect.bottom + 5))
+        text_bg_rect = text_rect.inflate(8, 4)
+        text_bg_color = (*glow_colors[0][:3], 80)
+        text_bg_surface = pygame.Surface((text_bg_rect.width, text_bg_rect.height), pygame.SRCALPHA)
+        pygame.draw.rect(text_bg_surface, text_bg_color, text_bg_surface.get_rect(), border_radius=4)
+        self.screen.blit(text_bg_surface, text_bg_rect.topleft)
         self.screen.blit(text_surface, text_rect)
+
+    def _get_ingredient_glow_colors(self, ingredient_name):
+        """Return ingredient-specific glow colors for visual variety"""
+        ingredient_colors = {
+            'Rice': [(255, 255, 200), (255, 245, 150), (255, 235, 100)],         # Warm white/yellow
+            'Salmon': [(255, 150, 120), (255, 100, 80), (255, 80, 60)],          # Salmon pink/orange
+            'Tuna': [(200, 100, 150), (180, 80, 120), (160, 60, 100)],           # Deep red/pink
+            'Shrimp': [(255, 180, 150), (255, 160, 120), (255, 140, 100)],       # Light orange/pink
+            'Egg': [(255, 255, 150), (255, 240, 100), (255, 220, 80)],           # Bright yellow
+            'Seaweed': [(100, 200, 150), (80, 180, 120), (60, 160, 100)],        # Green
+            'Cucumber': [(150, 255, 150), (120, 240, 120), (100, 220, 100)],     # Bright green
+            'Avocado': [(180, 220, 100), (160, 200, 80), (140, 180, 60)],        # Yellow-green
+            'Crab Meat': [(255, 200, 150), (255, 180, 120), (255, 160, 100)],    # Light orange
+            'Eel': [(120, 100, 80), (140, 120, 100), (160, 140, 120)],           # Brown
+            'Cream Cheese': [(255, 255, 240), (250, 250, 220), (245, 245, 200)], # Cream white
+            'Fish Roe': [(255, 180, 100), (255, 160, 80), (255, 140, 60)]        # Orange
+        }
+        
+        return ingredient_colors.get(ingredient_name, [
+            (255, 215, 0), (255, 180, 0), (255, 140, 0)  
+        ])
 
     def _draw_ui(self, state_data):
         ui_area = pygame.Rect(0, self.screen_height - self.ui_height, self.screen_width, self.ui_height)
