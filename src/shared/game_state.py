@@ -27,16 +27,21 @@ class GameState:
         self.fusion_stations = []
         self.enter_station = None
 
-        self.doorprize_station = None # (x, y) dari doorprize station
-        self.doorprize_spawn_time = 0 # timestamp kapan doorprize muncul
+        self.doorprize_station = None
+        self.doorprize_spawn_time = 0
         self.next_doorprize_spawn_delay = random.uniform(config.DOORPRIZE_SPAWN_INTERVAL_MIN, config.DOORPRIZE_SPAWN_INTERVAL_MAX)
-        self.players_collected_doorprize = set() # Set of player_ids who collected from current doorprize
+        self.players_collected_doorprize = set()
 
+        # --- PERBAIKAN UNTUK ORDER SPAWN ---
         self.last_order_spawn_time = time.time()
+        self.next_order_spawn_delay = random.uniform(config.ORDER_SPAWN_INTERVAL_MIN, config.ORDER_SPAWN_INTERVAL_MAX) # Penting: Inisialisasi ini juga
+        # --- AKHIR PERBAIKAN ---
         
-        # Tambahan untuk post-fusion handling
         self.all_possible_ingredients = ['Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed', 
                                        'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe']
+        
+        self.game_started = False
+        self.game_outcome = None
 
     def add_player(self, player_id, ingredient, pos):
         with self._lock:
@@ -100,8 +105,7 @@ class GameState:
             self.enter_station = pos
             existing_station_positions.append((*pos, config.STATION_SIZE))
 
-            self.doorprize_station = None # Reset for new game
-            # Set initial doorprize_spawn_time so it spawns after the first delay
+            self.doorprize_station = None
             self.doorprize_spawn_time = time.time() 
             self.next_doorprize_spawn_delay = random.uniform(config.DOORPRIZE_SPAWN_INTERVAL_MIN, config.DOORPRIZE_SPAWN_INTERVAL_MAX)
             self.players_collected_doorprize.clear()
@@ -124,8 +128,8 @@ class GameState:
 
                 pos = self._get_random_station_pos(existing_station_positions, config.STATION_SIZE)
                 self.doorprize_station = pos
-                self.doorprize_spawn_time = current_time # Ini waktu stasiun ini muncul
-                self.players_collected_doorprize.clear() # Clear untuk stasiun baru ini
+                self.doorprize_spawn_time = current_time
+                self.players_collected_doorprize.clear()
                 self._visual_events.append({"type": "doorprize_spawn", "data": {"pos": pos}})
                 print(f"Doorprize station spawned at {pos} at time {current_time:.2f}")
   
@@ -136,26 +140,21 @@ class GameState:
 
             current_time = time.time()
             if current_time - self.doorprize_spawn_time > config.DOORPRIZE_DURATION:
-                # Logika penghapusan stasiun doorprize setelah 3 detik
                 print(f"Doorprize station at {self.doorprize_station} expired.")
                 self._visual_events.append({"type": "doorprize_expire", "data": {"pos": self.doorprize_station}})
                 self.doorprize_station = None
-                self.doorprize_spawn_time = current_time # Reset time for next spawn
+                self.doorprize_spawn_time = current_time
                 self.next_doorprize_spawn_delay = random.uniform(config.DOORPRIZE_SPAWN_INTERVAL_MIN, config.DOORPRIZE_SPAWN_INTERVAL_MAX)
                 self.players_collected_doorprize.clear()
                 return
 
-            # Logika interaksi pemain dengan doorprize station yang aktif
             for player_id, player in self.players.items():
-                # Pastikan pemain belum mengumpulkan dari stasiun ini DAN
-                # Pemain berada di dalam area doorprize station
                 if player_id not in self.players_collected_doorprize and \
                    self._is_player_on_station(player.pos, self.doorprize_station):
                     
                     score_gain = random.randint(config.DOORPRIZE_SCORE_MIN, config.DOORPRIZE_SCORE_MAX)
-                    self.score += score_gain # Poin ditambahkan ke score total game
-                    self.players_collected_doorprize.add(player_id) # Tandai pemain sudah mengumpulkan
-                    # Tambahkan event visual agar klien bisa memutar SFX atau menampilkan notifikasi
+                    self.score += score_gain
+                    self.players_collected_doorprize.add(player_id)
                     self._visual_events.append({"type": "doorprize_collect", "data": {"player_id": player_id, "score": score_gain, "pos": self.doorprize_station}})
                     print(f"Player {player_id} collected {score_gain} from doorprize at {self.doorprize_station}. Total score: {self.score}")
 
@@ -234,7 +233,6 @@ class GameState:
                 self.score += recipe["price"]
                 print(f"Processing Fusion: {recipe['name']} served! +{recipe['price']} cuan at {pos}")
                 
-                # Pindahkan semua player yang terlibat fusion dan ubah ingredient mereka
                 for player_id in players_involved:
                     self._relocate_and_change_ingredient(player_id)
                 
@@ -283,7 +281,10 @@ class GameState:
             "fusion_stations": fusion_stations_copy,
             "enter_station": enter_station_copy,
             "doorprize_station": doorprize_station_copy,
-            "doorprize_remaining_time": doorprize_remaining_time
+            "doorprize_remaining_time": doorprize_remaining_time,
+            "game_started": self.game_started, # Pastikan ini ada
+            "game_outcome": self.game_outcome, # Pastikan ini ada
+            "clients_info": self.clients_info # Pastikan ini juga ada
         }
 
     def generate_orders(self, num_active_players):
@@ -293,6 +294,11 @@ class GameState:
                 print("DEBUG: No active players, cannot generate orders.")
                 return
             
+            # Pastikan recipe_manager sudah terinisialisasi dan memiliki resep
+            if not hasattr(self, 'recipe_manager') or not self.recipe_manager:
+                print("ERROR: RecipeManager is not initialized in GameState.")
+                return
+
             possible_recipes = self.recipe_manager.get_recipes_by_ingredient_count(max_ingredients=num_active_players)
             
             if not possible_recipes:

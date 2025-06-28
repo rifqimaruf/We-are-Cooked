@@ -53,16 +53,15 @@ class GameManager:
                 # Memastikan event hanya diproses sekali per ID
                 if event["id"] not in self._processed_event_ids:
                     if event["type"] == "recipe_fusion":
-                        asset_manager.sound_manager.play_sfx("Success Order", volume=0.6)
+                        asset_manager.sound_manager.play_sfx("CoinPlus", volume=0.8)
                         self._processed_event_ids.add(event["id"])
                     elif event["type"] == "doorprize_spawn":
-                        asset_manager.sound_manager.play_sfx("Doorprize Spawn", volume=0.8) # Contoh SFX baru
+                        asset_manager.sound_manager.play_sfx("Doorprize Spawn", volume=0.8)
                         self._processed_event_ids.add(event["id"])
                     elif event["type"] == "doorprize_collect":
-                        asset_manager.sound_manager.play_sfx("Doorprize Collect", volume=0.8) # Contoh SFX baru
+                        asset_manager.sound_manager.play_sfx("CoinPlus", volume=0.8)
                         self._processed_event_ids.add(event["id"])
                     elif event["type"] == "doorprize_expire":
-                        # Mungkin tidak perlu SFX khusus untuk expire, atau SFX yang lebih lembut
                         self._processed_event_ids.add(event["id"])
                     elif event["type"] == "player_relocate":
                         self._processed_event_ids.add(event["id"])
