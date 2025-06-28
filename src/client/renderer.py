@@ -30,15 +30,12 @@ class Renderer:
         pygame.display.flip()
 
     def draw_game_screen(self, game_manager):
-        # Draw background image if available, otherwise use solid color
         bg_image = self.assets.get_image('game_bg')
         if bg_image:
-            # Scale the background image to fit the screen
             scaled_bg = pygame.transform.scale(bg_image, (self.screen_width, self.screen_height))
             self.screen.blit(scaled_bg, (0, 0))
         else:
-            # Fallback to a nice kitchen-themed color
-            self.screen.fill((245, 245, 220))  # Beige color for kitchen theme
+            self.screen.fill((245, 245, 220))  
         
         state_data = game_manager.current_state
         if not state_data:
@@ -210,20 +207,17 @@ class Renderer:
             players_title = self.assets.get_font('default_36').render("Players in Lobby:", True, (200, 200, 200))
             players_title_rect = players_title.get_rect(center=(self.screen_width // 2, y_offset))
             
-            # Calculate total height needed for players list
             total_players = len(game_manager.current_state["clients_info"])
-            list_height = 50 + (total_players * 30) + 20  # title + players + padding
+            list_height = 50 + (total_players * 30) + 20 
             list_width = 400
             
-            # Create semi-transparent background for players list
             list_bg_rect = pygame.Rect(0, 0, list_width, list_height)
             list_bg_rect.center = (self.screen_width // 2, y_offset + (list_height // 2) - 25)
             list_bg_surface = pygame.Surface((list_bg_rect.width, list_bg_rect.height))
-            list_bg_surface.set_alpha(128)  # 50% transparency
-            list_bg_surface.fill((0, 0, 0))  # Black background
+            list_bg_surface.set_alpha(128) 
+            list_bg_surface.fill((0, 0, 0))  
             self.screen.blit(list_bg_surface, list_bg_rect)
             
-            # Draw players title and list
             self.screen.blit(players_title, players_title_rect)
             y_offset += 50
 

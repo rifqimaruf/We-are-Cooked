@@ -48,27 +48,20 @@ class AssetManager:
 
     def _load_images(self):
         try:
-            end_bg_path = os.path.join(self.base_path, 'images', 'end_bg.png')
-            if os.path.exists(end_bg_path):
-                self.images['end_bg'] = pygame.image.load(end_bg_path).convert()
-                print(f"Loaded background: end_bg.png")
-            else:
-                self.images['end_bg'] = None
-        except pygame.error as e:
-            print(f"Warning: Could not load end_bg.png: {e}")
-            self.images['end_bg'] = None
-        
-        try:
-            start_bg_path = os.path.join(self.base_path, 'images', 'start.jpg')
-            if os.path.exists(start_bg_path):
-                self.images['start_bg'] = pygame.image.load(start_bg_path).convert()
-                print(f"Loaded background: start.jpg")
+            start_jpg_path = os.path.join(self.base_path, 'images', 'start.jpg')
+            if os.path.exists(start_jpg_path):
+                start_image = pygame.image.load(start_jpg_path).convert()
+                self.images['start_bg'] = start_image
+                self.images['end_bg'] = start_image  
+                print(f"Loaded background: start.jpg (used for both start and end screens)")
             else:
                 self.images['start_bg'] = None
-                print(f"Warning: start.jpg not found at {start_bg_path}")
+                self.images['end_bg'] = None
+                print(f"Warning: start.jpg not found at {start_jpg_path}")
         except pygame.error as e:
             print(f"Warning: Could not load start.jpg: {e}")
             self.images['start_bg'] = None
+            self.images['end_bg'] = None
         
         try:
             game_bg_path = os.path.join(self.base_path, 'images', 'game_bg.png')
