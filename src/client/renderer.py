@@ -1,5 +1,6 @@
 # src/client/renderer.py
 import pygame
+import math
 from src.shared import config 
 import time # Import time for calculating remaining time
 
@@ -60,18 +61,74 @@ class Renderer:
         )
 
     def _draw_stations(self, state_data):
-        # Draw Fusion Stations
         fusion_stations = state_data.get("fusion_stations", [])
+        stove_image = self.assets.get_image('stove')
+        
+        glow_time = time.time() * 2.5  
+        glow_intensity = (math.sin(glow_time) + 1) / 2  
+        
+        pulse_time = time.time() * 4
+        pulse_intensity = (math.sin(pulse_time) + 1) / 2
+        
         for i, (sx, sy) in enumerate(fusion_stations):
-            for row in range(config.STATION_SIZE):
-                for col in range(config.STATION_SIZE):
-                    rect = pygame.Rect((sx + col) * self.tile_size, (sy + row) * self.tile_size, self.tile_size, self.tile_size)
-                    pygame.draw.rect(self.screen, (255, 150, 150, 100), rect) 
-                    pygame.draw.rect(self.screen, (200, 0, 0), rect, 2) 
+            station_rect = pygame.Rect(sx * self.tile_size, sy * self.tile_size, 
+                                     config.STATION_SIZE * self.tile_size, 
+                                     config.STATION_SIZE * self.tile_size)
+            
+            base_alpha = 30 + int(50 * glow_intensity)
+            glow_colors = [
+                (255, 80, 0, max(20, int(base_alpha * 0.6))),    
+                (255, 120, 20, max(30, int(base_alpha * 0.8))),  
+                (255, 180, 60, max(40, int(base_alpha * 1.0))), 
+                (255, 220, 120, max(25, int(base_alpha * 0.7 * pulse_intensity)))  
+            ]
+            
+            glow_offsets = [16, 12, 6, 3]  
+            
+            for glow_color, offset in zip(glow_colors, glow_offsets):
+                glow_rect = station_rect.inflate(offset * 2, offset * 2)
+                glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
+                pygame.draw.rect(glow_surface, glow_color, glow_surface.get_rect(), border_radius=offset//2 + 4)
+                self.screen.blit(glow_surface, glow_rect.topleft)
+            
+            sparkle_time = time.time() * 6 + i * 2 
+            for sparkle_idx in range(4): 
+                angle = sparkle_time + sparkle_idx * (math.pi / 2)
+                sparkle_distance = 30 + 10 * math.sin(sparkle_time * 2)
+                sparkle_x = station_rect.centerx + math.cos(angle) * sparkle_distance
+                sparkle_y = station_rect.centery + math.sin(angle) * sparkle_distance
+                
+                sparkle_alpha = int(150 * (math.sin(sparkle_time * 3 + sparkle_idx) + 1) / 2)
+                sparkle_size = 3 + int(2 * (math.sin(sparkle_time * 4 + sparkle_idx) + 1) / 2)
+                
+                sparkle_color = (255, 200 + int(50 * glow_intensity), 100, sparkle_alpha)
+                sparkle_surface = pygame.Surface((sparkle_size * 2, sparkle_size * 2), pygame.SRCALPHA)
+                pygame.draw.circle(sparkle_surface, sparkle_color, (sparkle_size, sparkle_size), sparkle_size)
+                self.screen.blit(sparkle_surface, (sparkle_x - sparkle_size, sparkle_y - sparkle_size))
+            
+            if stove_image:
+                self.screen.blit(stove_image, station_rect)
+                
+                shimmer_alpha = int(30 * glow_intensity)
+                shimmer_surface = pygame.Surface(station_rect.size, pygame.SRCALPHA)
+                shimmer_color = (255, 100, 0, shimmer_alpha)
+                pygame.draw.rect(shimmer_surface, shimmer_color, shimmer_surface.get_rect(), border_radius=4)
+                self.screen.blit(shimmer_surface, station_rect.topleft)
+            else:
+                for row in range(config.STATION_SIZE):
+                    for col in range(config.STATION_SIZE):
+                        rect = pygame.Rect((sx + col) * self.tile_size, (sy + row) * self.tile_size, self.tile_size, self.tile_size)
+                        pygame.draw.rect(self.screen, (255, 150, 150, 100), rect) 
+                        pygame.draw.rect(self.screen, (200, 0, 0), rect, 2) 
 
             font = self.assets.get_font('default_18')
-            text_surface = font.render(f"Fusion {i+1}", True, (50, 50, 50))
-            text_rect = text_surface.get_rect(topleft=(sx * self.tile_size + 5, sy * self.tile_size + 5))
+            text_surface = font.render(f"Fusion {i+1}", True, (255, 255, 255)) 
+            text_rect = text_surface.get_rect(center=(
+                (sx + config.STATION_SIZE/2) * self.tile_size, 
+                (sy + config.STATION_SIZE - 0.2) * self.tile_size
+            ))
+            text_bg_rect = text_rect.inflate(6, 2)
+            pygame.draw.rect(self.screen, (0, 0, 0, 128), text_bg_rect, border_radius=3)
             self.screen.blit(text_surface, text_rect)
 
         # Draw Enter Station
