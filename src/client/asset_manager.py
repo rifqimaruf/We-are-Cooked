@@ -49,10 +49,36 @@ class AssetManager:
     def _load_images(self):
         try:
             end_bg_path = os.path.join(self.base_path, 'images', 'end_bg.png')
-            self.images['end_bg'] = pygame.image.load(end_bg_path).convert()
+            if os.path.exists(end_bg_path):
+                self.images['end_bg'] = pygame.image.load(end_bg_path).convert()
+                print(f"Loaded background: end_bg.png")
+            else:
+                self.images['end_bg'] = None
         except pygame.error as e:
             print(f"Warning: Could not load end_bg.png: {e}")
-        self.images['end_bg'] = None
+            self.images['end_bg'] = None
+        
+        try:
+            start_bg_path = os.path.join(self.base_path, 'images', 'start.jpg')
+            if os.path.exists(start_bg_path):
+                self.images['start_bg'] = pygame.image.load(start_bg_path).convert()
+                print(f"Loaded background: start.jpg")
+            else:
+                self.images['start_bg'] = None
+                print(f"Warning: start.jpg not found at {start_bg_path}")
+        except pygame.error as e:
+            print(f"Warning: Could not load start.jpg: {e}")
+            self.images['start_bg'] = None
+        
+        try:
+            game_bg_path = os.path.join(self.base_path, 'images', 'game_bg.png')
+            if os.path.exists(game_bg_path):
+                self.images['game_bg'] = pygame.image.load(game_bg_path).convert()
+                print(f"Loaded background: game_bg.png")
+            else:
+                self.images['game_bg'] = None
+        except pygame.error as e:
+            self.images['game_bg'] = None
 
     def _load_fonts(self):
         self.fonts['default_72'] = pygame.font.SysFont(None, 72)

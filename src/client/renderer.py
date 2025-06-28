@@ -30,7 +30,16 @@ class Renderer:
         pygame.display.flip()
 
     def draw_game_screen(self, game_manager):
-        self.screen.fill((240, 240, 240))
+        # Draw background image if available, otherwise use solid color
+        bg_image = self.assets.get_image('game_bg')
+        if bg_image:
+            # Scale the background image to fit the screen
+            scaled_bg = pygame.transform.scale(bg_image, (self.screen_width, self.screen_height))
+            self.screen.blit(scaled_bg, (0, 0))
+        else:
+            # Fallback to a nice kitchen-themed color
+            self.screen.fill((245, 245, 220))  # Beige color for kitchen theme
+        
         state_data = game_manager.current_state
         if not state_data:
             return
@@ -179,15 +188,42 @@ class Renderer:
                 self.screen.blit(order_text_surface, (orders_bg_rect.x + 10, orders_bg_rect.y + 30 + i * 25))
 
     def draw_start_screen(self, game_manager):
-        self.screen.fill((30, 30, 50))
+        bg_image = self.assets.get_image('start_bg')
+        if bg_image:
+            scaled_bg = pygame.transform.scale(bg_image, (self.screen_width, self.screen_height))
+            self.screen.blit(scaled_bg, (0, 0))
+        else:
+            self.screen.fill((30, 30, 50))
+        
         title_text = self.assets.get_font('default_72').render("We are Cooked!", True, (255, 220, 100))
         title_rect = title_text.get_rect(center=(self.screen_width // 2, self.screen_height // 6))
+        
+        title_bg_rect = title_rect.inflate(40, 20) 
+        title_bg_surface = pygame.Surface((title_bg_rect.width, title_bg_rect.height))
+        title_bg_surface.set_alpha(150)  
+        title_bg_surface.fill((0, 0, 0))  
+        self.screen.blit(title_bg_surface, title_bg_rect)
         self.screen.blit(title_text, title_rect)
         
         if game_manager.current_state and "clients_info" in game_manager.current_state:
             y_offset = self.screen_height // 2 - 40
             players_title = self.assets.get_font('default_36').render("Players in Lobby:", True, (200, 200, 200))
             players_title_rect = players_title.get_rect(center=(self.screen_width // 2, y_offset))
+            
+            # Calculate total height needed for players list
+            total_players = len(game_manager.current_state["clients_info"])
+            list_height = 50 + (total_players * 30) + 20  # title + players + padding
+            list_width = 400
+            
+            # Create semi-transparent background for players list
+            list_bg_rect = pygame.Rect(0, 0, list_width, list_height)
+            list_bg_rect.center = (self.screen_width // 2, y_offset + (list_height // 2) - 25)
+            list_bg_surface = pygame.Surface((list_bg_rect.width, list_bg_rect.height))
+            list_bg_surface.set_alpha(128)  # 50% transparency
+            list_bg_surface.fill((0, 0, 0))  # Black background
+            self.screen.blit(list_bg_surface, list_bg_rect)
+            
+            # Draw players title and list
             self.screen.blit(players_title, players_title_rect)
             y_offset += 50
 
