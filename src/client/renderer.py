@@ -28,7 +28,16 @@ class Renderer:
         pygame.display.flip()
 
     def draw_game_screen(self, game_manager):
-        self.screen.fill((240, 240, 240))
+        # Draw background image if available, otherwise use solid color
+        bg_image = self.assets.get_image('game_bg')
+        if bg_image:
+            # Scale the background image to fit the screen
+            scaled_bg = pygame.transform.scale(bg_image, (self.screen_width, self.screen_height))
+            self.screen.blit(scaled_bg, (0, 0))
+        else:
+            # Fallback to a nice kitchen-themed color
+            self.screen.fill((245, 245, 220))  # Beige color for kitchen theme
+        
         state_data = game_manager.current_state
         if not state_data:
             return
