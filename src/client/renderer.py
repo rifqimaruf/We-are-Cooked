@@ -151,32 +151,97 @@ class Renderer:
         if doorprize_station_pos:
             sx, sy = doorprize_station_pos
             doorprize_remaining_time = state_data.get("doorprize_remaining_time", 0)
-
-            # Warna yang lebih mencolok untuk doorprize (misal: ungu atau emas)
-            fill_color = (200, 100, 255, 150) # Ungu transparan
-            border_color = (150, 0, 200) # Ungu gelap
-
-            # Animasi visual berdasarkan waktu yang tersisa (opsional)
-            # Misalnya, warna bisa berkedip atau menjadi lebih transparan saat mendekati akhir
-            if doorprize_remaining_time < 1.0: # Jika kurang dari 1 detik
-                blink_alpha = int(150 * (doorprize_remaining_time * 2 % 1)) + 50 # Berkedip
-                fill_color = (200, 100, 255, blink_alpha)
             
-            for row in range(config.STATION_SIZE):
-                for col in range(config.STATION_SIZE):
-                    rect = pygame.Rect((sx + col) * self.tile_size, (sy + row) * self.tile_size, self.tile_size, self.tile_size)
-                    pygame.draw.rect(self.screen, fill_color, rect)
-                    pygame.draw.rect(self.screen, border_color, rect, 2)
+            treasure_image = self.assets.get_image('treasure')
             
-            font = self.assets.get_font('default_24')
+            station_rect = pygame.Rect(sx * self.tile_size, sy * self.tile_size, 
+                                     config.STATION_SIZE * self.tile_size, 
+                                     config.STATION_SIZE * self.tile_size)
+            
+            glow_time = time.time() * 3.0
+            glow_intensity = (math.sin(glow_time) + 1) / 2  
+            
+            pulse_time = time.time() * 5  
+            pulse_intensity = (math.sin(pulse_time) + 1) / 2
+            
+            urgency_multiplier = 1.0
+            if doorprize_remaining_time < 5.0:  
+                urgency_multiplier = 1.0 + (5.0 - doorprize_remaining_time) * 0.3
+                glow_intensity = min(1.0, glow_intensity * urgency_multiplier)
+            
+            base_alpha = 35 + int(60 * glow_intensity)
+            glow_colors = [
+                (255, 215, 0, max(25, int(base_alpha * 0.6))),    
+                (255, 140, 0, max(35, int(base_alpha * 0.8))),      
+                (255, 255, 100, max(45, int(base_alpha * 1.0))), 
+                (255, 255, 200, max(30, int(base_alpha * 0.7 * pulse_intensity))) 
+            ]
+            
+            glow_offsets = [18, 14, 8, 4]  
+            
+            for glow_color, offset in zip(glow_colors, glow_offsets):
+                glow_rect = station_rect.inflate(offset * 2, offset * 2)
+                glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
+                pygame.draw.rect(glow_surface, glow_color, glow_surface.get_rect(), border_radius=offset//2 + 6)
+                self.screen.blit(glow_surface, glow_rect.topleft)
+            
+            sparkle_time = time.time() * 7 + sx + sy  
+            for sparkle_idx in range(6): 
+                angle = sparkle_time + sparkle_idx * (math.pi / 3)  
+                sparkle_distance = 35 + 12 * math.sin(sparkle_time * 2.5)
+                sparkle_x = station_rect.centerx + math.cos(angle) * sparkle_distance
+                sparkle_y = station_rect.centery + math.sin(angle) * sparkle_distance
+                
+                sparkle_alpha = int(180 * (math.sin(sparkle_time * 4 + sparkle_idx) + 1) / 2)
+                sparkle_size = 2 + int(3 * (math.sin(sparkle_time * 5 + sparkle_idx) + 1) / 2)
+                
+                sparkle_color = (255, 215 + int(40 * glow_intensity), 0, sparkle_alpha)
+                sparkle_surface = pygame.Surface((sparkle_size * 2, sparkle_size * 2), pygame.SRCALPHA)
+                pygame.draw.circle(sparkle_surface, sparkle_color, (sparkle_size, sparkle_size), sparkle_size)
+                self.screen.blit(sparkle_surface, (sparkle_x - sparkle_size, sparkle_y - sparkle_size))
+            
+            if treasure_image:
+                self.screen.blit(treasure_image, station_rect)
+                
+                shimmer_alpha = int(40 * glow_intensity)
+                shimmer_surface = pygame.Surface(station_rect.size, pygame.SRCALPHA)
+                shimmer_color = (255, 215, 0, shimmer_alpha)
+                pygame.draw.rect(shimmer_surface, shimmer_color, shimmer_surface.get_rect(), border_radius=6)
+                self.screen.blit(shimmer_surface, station_rect.topleft)
+            else:
+                for row in range(config.STATION_SIZE):
+                    for col in range(config.STATION_SIZE):
+                        rect = pygame.Rect((sx + col) * self.tile_size, (sy + row) * self.tile_size, self.tile_size, self.tile_size)
+                        fill_color = (200, 100, 255, 150)
+                        border_color = (150, 0, 200)
+                        
+                        if doorprize_remaining_time < 1.0:
+                            blink_alpha = int(150 * (doorprize_remaining_time * 2 % 1)) + 50
+                            fill_color = (200, 100, 255, blink_alpha)
+                        
+                        pygame.draw.rect(self.screen, fill_color, rect)
+                        pygame.draw.rect(self.screen, border_color, rect, 2)
+            
+            # Draw "Doorprize!" text
+            font = self.assets.get_font('default_18')
             text_surface = font.render("Doorprize!", True, (255, 255, 255))
-            text_rect = text_surface.get_rect(center=((sx + 0.5) * self.tile_size, (sy + 0.5) * self.tile_size - 10))
+            text_rect = text_surface.get_rect(center=(
+                (sx + config.STATION_SIZE/2) * self.tile_size, 
+                (sy + config.STATION_SIZE - 0.2) * self.tile_size
+            ))
+            text_bg_rect = text_rect.inflate(6, 2)
+            pygame.draw.rect(self.screen, (0, 0, 0, 120), text_bg_rect, border_radius=3)
             self.screen.blit(text_surface, text_rect)
 
-            # Tampilkan sisa waktu
+            # Draw remaining time
             timer_font = self.assets.get_font('default_18')
-            timer_text_surface = timer_font.render(f"{doorprize_remaining_time:.1f}s", True, (255, 255, 255))
-            timer_text_rect = timer_text_surface.get_rect(center=((sx + 0.5) * self.tile_size, (sy + 1.5) * self.tile_size + 10))
+            timer_text_surface = timer_font.render(f"{doorprize_remaining_time:.1f}s", True, (255, 255, 0))
+            timer_text_rect = timer_text_surface.get_rect(center=(
+                (sx + config.STATION_SIZE/2) * self.tile_size, 
+                (sy + config.STATION_SIZE + 0.3) * self.tile_size
+            ))
+            timer_bg_rect = timer_text_rect.inflate(6, 2)
+            pygame.draw.rect(self.screen, (0, 0, 0, 120), timer_bg_rect, border_radius=3)
             self.screen.blit(timer_text_surface, timer_text_rect)
 
 

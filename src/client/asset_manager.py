@@ -110,6 +110,20 @@ class AssetManager:
         except pygame.error as e:
             print(f"Warning: Could not load stove.png: {e}")
             self.images['stove'] = None
+        
+        try:
+            treasure_path = os.path.join(self.base_path, 'images', 'treasure.png')
+            if os.path.exists(treasure_path):
+                treasure_image = pygame.image.load(treasure_path).convert_alpha()
+                treasure_size = (self.tile_size * 2, self.tile_size * 2)
+                self.images['treasure'] = pygame.transform.scale(treasure_image, treasure_size)
+                print(f"Loaded station image: treasure.png")
+            else:
+                self.images['treasure'] = None
+                print(f"Warning: treasure.png not found at {treasure_path}")
+        except pygame.error as e:
+            print(f"Warning: Could not load treasure.png: {e}")
+            self.images['treasure'] = None
 
     def _load_fonts(self):
         self.fonts['default_72'] = pygame.font.SysFont(None, 72)
