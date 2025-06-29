@@ -57,6 +57,12 @@ Required packages:
 - `pygame==2.6.1` - Game engine and graphics
 - `requests==2.31.0` - HTTP client functionality
 
+### Database
+After installation is complete, you would need to run the databse initialization program before running a server instance.
+```sh
+python -m src.shared.initialize_database
+```
+
 ### Running the Game
 
 #### 1. Start the Server
