@@ -1,11 +1,8 @@
-import sys
-import os.path
 import uuid
 import json
 import threading
 import time
 import logging
-from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs, urlparse
@@ -13,7 +10,6 @@ from urllib.parse import parse_qs, urlparse
 from src.shared.game_state import GameState
 from src.shared import config
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -37,7 +33,7 @@ class GameHttpHandler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
 
-    def do_OPTIONS(self):
+    def http_options(self):
         self._set_headers()
 
     def do_GET(self):
