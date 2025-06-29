@@ -1,4 +1,4 @@
-SERVER_IP = "127.0.0.1"
+SERVER_IP = "192.168.1.65"
 SERVER_PORT = 5555
 
 BUFFER_SIZE = 4096
@@ -39,3 +39,7 @@ WIN_BACKGROUND_IMAGE = "end_win.jpg"
 WIN_SOUND = "Mission Complete.mp3"
 LOSE_BACKGROUND_IMAGE = "end_lose.jpg"
 LOSE_SOUND = "Mission Failed.mp3"  
+
+# HTTP Keep-Alive Configuration (for server)
+KEEP_ALIVE_TIMEOUT = 5 # seconds to keep connection open after last request
+KEEP_ALIVE_MAX_REQUESTS = 100 # max requests per single keep-alive connection
