@@ -1,6 +1,6 @@
 """
 HTTP Server implementation for We are Cooked game
-This replaces the socket-based server with an HTTP-based implementation
+Using a barebones socket-based HTTP implementation
 """
 
 import sys

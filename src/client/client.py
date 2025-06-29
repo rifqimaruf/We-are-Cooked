@@ -1,6 +1,5 @@
 """
 HTTP Client implementation for We are Cooked game
-This replaces the socket-based client with an HTTP-based implementation
 """
 
 import pygame

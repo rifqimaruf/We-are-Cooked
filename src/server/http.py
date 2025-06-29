@@ -1,10 +1,12 @@
-import uuid
-import json
+import sys
+import socket
 import threading
 import time
+import json
+import uuid
 import logging
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from socketserver import ThreadingMixIn
+from datetime import datetime
+import random
 from urllib.parse import parse_qs, urlparse
 
 from src.shared.game_state import GameState
@@ -17,160 +19,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger('GameServer')
 
-class GameHttpHandler(BaseHTTPRequestHandler):
-    """
-    HTTP request handler for the game server.
-    Handles GET and POST requests for game state and actions.
-    """
-    # These class variables will be accessed through self.server
-    # No need to override __init__ which causes the error
-
-    def _set_headers(self, status_code=200, content_type='application/json'):
-        self.send_response(status_code)
-        self.send_header('Content-Type', content_type)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.end_headers()
-
-    def http_options(self):
-        self._set_headers()
-
-    def do_GET(self):
-        """Handle GET requests - used for clients to get game state updates"""
-        parsed_path = urlparse(self.path)
-        path = parsed_path.path
-        
-        if path == '/game_state':
-            # Return the current game state
-            state_dict = self.server.game_state.to_dict()
-            state_dict["clients_info"] = self.server.clients_info
-            state_dict["game_started"] = self.server.game_started
-            
-            # Add visual effects
-            state_dict["visual_effects"] = {"game_events": []}
-            if "_visual_events" in state_dict:
-                state_dict["visual_effects"]["game_events"].extend(state_dict["_visual_events"])
-                del state_dict["_visual_events"]
-            
-            # Extract client_id from query parameters if present
-            query_params = parse_qs(parsed_path.query)
-            client_id = query_params.get('client_id', [None])[0]
-            if client_id:
-                state_dict["client_id"] = client_id
-            
-            self._set_headers()
-            self.wfile.write(json.dumps(state_dict).encode())
-            return
-        
-        elif path == '/health':
-            # Simple health check endpoint
-            self._set_headers()
-            self.wfile.write(json.dumps({"status": "ok", "players": len(self.server.clients_info)}).encode())
-            return
-            
-        else:
-            # Handle 404 for unknown paths
-            self._set_headers(404)
-            self.wfile.write(json.dumps({"error": "Not found"}).encode())
-
-    def do_POST(self):
-        """Handle POST requests - used for client actions"""
-        content_length = int(self.headers['Content-Length'])
-        post_data = self.rfile.read(content_length)
-        
-        try:
-            data = json.loads(post_data.decode('utf-8'))
-            action = data.get("action")
-            client_id = data.get("client_id")
-            
-            # Register new client if this is a connection request
-            if self.path == '/connect':
-                if not client_id:
-                    client_id = str(uuid.uuid4())
-                    self.server.register_client(client_id)
-                
-                response = {
-                    "client_id": client_id,
-                    "status": "connected",
-                    "game_state": self.server.game_state.to_dict(),
-                    "clients_info": self.server.clients_info,
-                    "game_started": self.server.game_started
-                }
-                self._set_headers(200)
-                self.wfile.write(json.dumps(response).encode())
-                return
-            
-            # Handle client actions
-            if self.path == '/action':
-                if not client_id or client_id not in self.server.clients_info:
-                    self._set_headers(400)
-                    self.wfile.write(json.dumps({"error": "Invalid client ID"}).encode())
-                    return
-                
-                # Process the action based on game state
-                if action == "return_to_lobby":
-                    self.server.return_to_lobby()
-                
-                elif not self.server.game_started:
-                    if action == "set_username":
-                        username = data.get("username", "Unknown")
-                        self.server.clients_info[client_id]["username"] = username
-                        logger.info(f"Client {client_id} set username to {username}")
-                    
-                    elif action == "toggle_ready":
-                        self.server.clients_info[client_id]["ready"] = not self.server.clients_info[client_id].get("ready", False)
-                        logger.info(f"Client {client_id} toggled ready. Status: {self.server.clients_info[client_id]['ready']}")
-                    
-                    elif action == "start_game":
-                        if all(c["ready"] for c in self.server.clients_info.values()) and len(self.server.clients_info) > 1:
-                            self.server.restart_game()
-                
-                else:
-                    if self.server.game_state.timer > 0:
-                        if action == "move":
-                            direction = data.get("direction")
-                            self.server.game_state.move_player(client_id, direction)
-                            logger.info(f"Client {client_id} moved {direction}")
-                        
-                        elif action == "restart":
-                            self.server.restart_game()
-                        
-                        elif action == "change_ingredient":
-                            if self.server.game_state.can_player_change_ingredient(client_id):
-                                self.server.change_player_ingredient(client_id)
-                
-                # Return success response
-                self._set_headers(200)
-                self.wfile.write(json.dumps({"status": "success"}).encode())
-                return
-            
-            # Handle disconnect
-            if self.path == '/disconnect':
-                if client_id in self.server.clients_info:
-                    self.server.cleanup_disconnected_players([client_id])
-                    logger.info(f"Client {client_id} disconnected")
-                
-                self._set_headers(200)
-                self.wfile.write(json.dumps({"status": "disconnected"}).encode())
-                return
-            
-            # Handle unknown paths
-            self._set_headers(404)
-            self.wfile.write(json.dumps({"error": "Not found"}).encode())
-            
-        except json.JSONDecodeError:
-            self._set_headers(400)
-            self.wfile.write(json.dumps({"error": "Invalid JSON"}).encode())
-        except Exception as e:
-            logger.error(f"Error processing request: {e}")
-            self._set_headers(500)
-            self.wfile.write(json.dumps({"error": str(e)}).encode())
-
-class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    """Handle requests in a separate thread."""
-    def __init__(self, server_address, RequestHandlerClass):
-        super().__init__(server_address, RequestHandlerClass)
+class HttpServer:
+    def __init__(self):
         self.game_state = GameState()
         self.clients_info = {}
         self.game_started = False
@@ -179,6 +29,218 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         self.game_events = []
         self.shutdown_flag = False
         
+    def response(self, kode=200, message='OK', messagebody=bytes(), headers={}):
+        """Generate HTTP response"""
+        tanggal = datetime.now().strftime('%c')
+        resp = []
+        resp.append(f"HTTP/1.0 {kode} {message}\r\n")
+        resp.append(f"Date: {tanggal}\r\n")
+        resp.append("Connection: close\r\n")
+        resp.append("Server: WeAreCooked/1.0\r\n")
+        resp.append(f"Content-Length: {len(messagebody)}\r\n")
+        
+        # Add CORS headers for browser clients
+        resp.append("Access-Control-Allow-Origin: *\r\n")
+        resp.append("Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n")
+        resp.append("Access-Control-Allow-Headers: Content-Type\r\n")
+        
+        for kk in headers:
+            resp.append(f"{kk}: {headers[kk]}\r\n")
+        resp.append("\r\n")
+
+        response_headers = ''.join(resp)
+        
+        # Convert messagebody to bytes if it's not already
+        if not isinstance(messagebody, bytes):
+            messagebody = messagebody.encode()
+
+        # Combine headers and body
+        response = response_headers.encode() + messagebody
+        return response
+
+    def proses(self, data):
+        """Process HTTP request data"""
+        requests = data.split("\r\n")
+        
+        if not requests:
+            return self.response(400, 'Bad Request', '', {})
+            
+        baris = requests[0]
+        
+        # Extract headers
+        headers = {}
+        for h in requests[1:]:
+            if h == '':
+                break
+            if ': ' in h:
+                k, v = h.split(': ', 1)
+                headers[k.lower()] = v
+        
+        # Parse request line
+        j = baris.split(" ")
+        try:
+            method = j[0].upper().strip()
+            url = j[1].strip()
+            
+            # Parse URL
+            parsed_url = urlparse(url)
+            path = parsed_url.path
+            query = parse_qs(parsed_url.query)
+            
+            # Handle different HTTP methods
+            if method == 'GET':
+                return self.http_get(path, query, headers)
+            elif method == 'POST':
+                # Find the request body
+                body = ""
+                content_length = int(headers.get('content-length', 0))
+                
+                # Find the body in the request
+                empty_line_found = False
+                for i, line in enumerate(requests):
+                    if line == '' and i < len(requests) - 1:
+                        empty_line_found = True
+                        body_lines = requests[i+1:]
+                        body = '\r\n'.join(body_lines)
+                        break
+                
+                # If we couldn't find the body using the empty line method,
+                # try to extract it based on content-length
+                if not empty_line_found and content_length > 0:
+                    # Find the double CRLF that separates headers from body
+                    raw_data = data
+                    body_start = raw_data.find('\r\n\r\n')
+                    if body_start != -1:
+                        body = raw_data[body_start + 4:]
+                
+                return self.http_post(path, query, body, headers)
+            elif method == 'OPTIONS':
+                return self.http_options(path, query, headers)
+            else:
+                return self.response(405, 'Method Not Allowed', '', {})
+        except IndexError:
+            return self.response(400, 'Bad Request', '', {})
+
+    def http_get(self, path, query, headers):
+        """Handle GET requests"""
+        if path == '/game_state':
+            # Return the current game state
+            state_dict = self.game_state.to_dict()
+            state_dict["clients_info"] = self.clients_info
+            state_dict["game_started"] = self.game_started
+            
+            # Add visual effects
+            state_dict["visual_effects"] = {"game_events": []}
+            if "_visual_events" in state_dict:
+                state_dict["visual_effects"]["game_events"].extend(state_dict["_visual_events"])
+                del state_dict["_visual_events"]
+            
+            # Extract client_id from query parameters if present
+            client_id = query.get('client_id', [None])[0]
+            if client_id:
+                state_dict["client_id"] = client_id
+            
+            return self.response(200, 'OK', json.dumps(state_dict), {'Content-Type': 'application/json'})
+        
+        elif path == '/health':
+            # Simple health check endpoint
+            return self.response(200, 'OK', json.dumps({"status": "ok", "players": len(self.clients_info)}), 
+                                {'Content-Type': 'application/json'})
+            
+        else:
+            # Handle 404 for unknown paths
+            return self.response(404, 'Not Found', json.dumps({"error": "Not found"}), 
+                                {'Content-Type': 'application/json'})
+
+    def http_post(self, path, query, body, headers):
+        """Handle POST requests"""
+        try:
+            data = json.loads(body)
+            action = data.get("action")
+            client_id = data.get("client_id")
+            
+            # Register new client if this is a connection request
+            if path == '/connect':
+                if not client_id:
+                    client_id = str(uuid.uuid4())
+                    self.register_client(client_id)
+                
+                response = {
+                    "client_id": client_id,
+                    "status": "connected",
+                    "game_state": self.game_state.to_dict(),
+                    "clients_info": self.clients_info,
+                    "game_started": self.game_started
+                }
+                return self.response(200, 'OK', json.dumps(response), {'Content-Type': 'application/json'})
+            
+            # Handle client actions
+            if path == '/action':
+                if not client_id or client_id not in self.clients_info:
+                    return self.response(400, 'Bad Request', json.dumps({"error": "Invalid client ID"}), 
+                                        {'Content-Type': 'application/json'})
+                
+                # Process the action based on game state
+                if action == "return_to_lobby":
+                    self.return_to_lobby()
+                
+                elif not self.game_started:
+                    if action == "set_username":
+                        username = data.get("username", "Unknown")
+                        self.clients_info[client_id]["username"] = username
+                        logger.info(f"Client {client_id} set username to {username}")
+                    
+                    elif action == "toggle_ready":
+                        self.clients_info[client_id]["ready"] = not self.clients_info[client_id].get("ready", False)
+                        logger.info(f"Client {client_id} toggled ready. Status: {self.clients_info[client_id]['ready']}")
+                    
+                    elif action == "start_game":
+                        if all(c["ready"] for c in self.clients_info.values()) and len(self.clients_info) > 1:
+                            self.restart_game()
+                
+                else:
+                    if self.game_state.timer > 0:
+                        if action == "move":
+                            direction = data.get("direction")
+                            self.game_state.move_player(client_id, direction)
+                            logger.info(f"Client {client_id} moved {direction}")
+                        
+                        elif action == "restart":
+                            self.restart_game()
+                        
+                        elif action == "change_ingredient":
+                            if self.game_state.can_player_change_ingredient(client_id):
+                                self.change_player_ingredient(client_id)
+                
+                # Return success response
+                return self.response(200, 'OK', json.dumps({"status": "success"}), {'Content-Type': 'application/json'})
+            
+            # Handle disconnect
+            if path == '/disconnect':
+                if client_id in self.clients_info:
+                    self.cleanup_disconnected_players([client_id])
+                    logger.info(f"Client {client_id} disconnected")
+                
+                return self.response(200, 'OK', json.dumps({"status": "disconnected"}), {'Content-Type': 'application/json'})
+            
+            # Handle unknown paths
+            return self.response(404, 'Not Found', json.dumps({"error": "Not found"}), {'Content-Type': 'application/json'})
+            
+        except json.JSONDecodeError:
+            return self.response(400, 'Bad Request', json.dumps({"error": "Invalid JSON"}), {'Content-Type': 'application/json'})
+        except Exception as e:
+            logger.error(f"Error processing request: {e}")
+            return self.response(500, 'Internal Server Error', json.dumps({"error": str(e)}), {'Content-Type': 'application/json'})
+
+    def http_options(self, path, query, headers):
+        """Handle OPTIONS requests for CORS preflight"""
+        return self.response(200, 'OK', '', {
+            'Content-Type': 'text/plain',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type'
+        })
+
     def register_client(self, client_id):
         """Register a new client connection"""
         self.clients_info[client_id] = {"username": f"Chef_{client_id[:5]}", "ready": False}
@@ -250,8 +312,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     
     def _assign_ingredients_to_players(self):
         """Assign ingredients to players at game start"""
-        import random
-        
         all_possible_ingredients = [
             'Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed', 
             'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe'
@@ -285,8 +345,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     
     def change_player_ingredient(self, player_id):
         """Change a player's ingredient at an Enter Station"""
-        import random
-        
         all_possible_ingredients = [
             'Rice', 'Salmon', 'Tuna', 'Shrimp', 'Egg', 'Seaweed',
             'Cucumber', 'Avocado', 'Crab Meat', 'Eel', 'Cream Cheese', 'Fish Roe'
@@ -304,7 +362,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
                     "old_ingredient": old_ing, 
                     "new_ingredient": new_ing
                 })
-    
+
     def _add_game_event(self, event_type, data):
         """Add a game event to the event queue"""
         class GameEvent:
@@ -323,7 +381,6 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     
     def _random_range(self, min_val, max_val):
         """Generate a random value in the given range"""
-        import random
         return random.uniform(min_val, max_val)
     
     def _game_timer_thread(self):
@@ -370,18 +427,79 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         
         logger.info(f"Timer thread: Exiting loop. timer_thread_active={self.timer_thread_active}")
 
+def ProcessTheClient(connection, address, server):
+    """Process client connection in a separate thread"""
+    try:
+        rcv = ""
+        while True:
+            data = connection.recv(4096)
+            if data:
+                # Convert bytes to string for processing
+                d = data.decode()
+                rcv += d
+                
+                # Check if we've received a complete HTTP request
+                if "\r\n\r\n" in rcv:
+                    # Process the request
+                    hasil = server.proses(rcv)
+                    
+                    # Send the response
+                    connection.sendall(hasil)
+                    
+                    # Close the connection (HTTP/1.0 style)
+                    connection.close()
+                    break
+            else:
+                # No more data, close connection
+                connection.close()
+                break
+    except Exception as e:
+        logger.error(f"Error processing client {address}: {e}")
+    finally:
+        connection.close()
+
 def run_server(host='0.0.0.0', port=8000):
-    """Run the HTTP game server"""
-    server_address = (host, port)
-    httpd = ThreadedHTTPServer(server_address, GameHttpHandler)
+    """Run the HTTP game server using raw sockets"""
+    # Create server socket
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server_socket.bind((host, port))
+    server_socket.listen(5)
+    
     logger.info(f"Starting HTTP game server on {host}:{port}")
     
+    # Create server instance
+    server = HttpServer()
+    
+    # Thread pool for client connections
+    client_threads = []
+    
     try:
-        httpd.serve_forever()
+        while True:
+            # Accept client connection
+            client_socket, client_address = server_socket.accept()
+            logger.info(f"Connection from {client_address}")
+            
+            # Create thread to handle client
+            client_thread = threading.Thread(
+                target=ProcessTheClient,
+                args=(client_socket, client_address, server),
+                daemon=True
+            )
+            client_thread.start()
+            
+            # Add to thread pool and clean up completed threads
+            client_threads.append(client_thread)
+            client_threads = [t for t in client_threads if t.is_alive()]
+            
     except KeyboardInterrupt:
         logger.info("Server shutting down")
-        httpd.shutdown_flag = True
-        httpd.server_close()
+    finally:
+        server_socket.close()
+        
+        # Wait for client threads to finish
+        for thread in client_threads:
+            thread.join(timeout=1.0)
 
 if __name__ == "__main__":
     run_server(host=config.SERVER_IP, port=config.SERVER_PORT)

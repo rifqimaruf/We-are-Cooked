@@ -1,68 +1,57 @@
-# HTTP Implementation for We are Cooked
+# HTTP Implementation Details
 
-This document explains the HTTP-based implementation that has been added as an alternative to the original socket-based communication protocol.
+This document describes the HTTP implementation used in the "We are Cooked" game.
 
-## Overview
+## Barebones HTTP Implementation
 
-The original game used direct socket connections with a custom protocol for communication between the server and clients. This new implementation uses HTTP as the communication protocol, which offers several advantages:
+The game uses a barebones HTTP implementation built on raw sockets, similar to the approach used in the progjar repository examples. This implementation avoids using Python's built-in HTTP libraries and instead handles HTTP requests and responses manually.
 
-- Standard protocol with better compatibility across networks
-- Easier debugging using standard tools
-- Simpler implementation of client-server communication
-- Better error handling and status codes
-- Potential for web-based clients in the future
+### Server Implementation
 
-## Architecture
+The server uses a socket-based approach to handle HTTP requests:
 
-### Server
+1. A socket is created and bound to the specified host and port
+2. The server listens for incoming connections
+3. When a client connects, a new thread is spawned to handle the connection
+4. The thread reads data from the client until a complete HTTP request is received
+5. The request is parsed and processed by the `HttpServer` class
+6. An appropriate HTTP response is generated and sent back to the client
+7. The connection is closed (HTTP/1.0 style)
 
-The HTTP server implementation uses Python's built-in `http.server` module with the following components:
+### Client Implementation
 
-- `ThreadedHTTPServer`: A multi-threaded HTTP server that handles multiple client connections
-- `GameHttpHandler`: Handles HTTP requests and manages game state
+The client also uses a socket-based approach to send HTTP requests:
 
-The server exposes the following endpoints:
+1. For each request, a new socket connection is created
+2. The client sends an HTTP request to the server
+3. The client reads the server's response and parses it
+4. The client closes the connection after each request (HTTP/1.0 style)
+5. A polling thread regularly requests game state updates from the server
 
-- `GET /game_state`: Returns the current game state
-- `POST /connect`: Registers a new client and returns initial game state
-- `POST /action`: Processes client actions (movement, ingredient changes, etc.)
-- `POST /disconnect`: Handles client disconnection
-- `GET /health`: Simple health check endpoint
+## HTTP API Endpoints
 
-### Client
+### Server Endpoints
 
-The HTTP client implementation uses the `requests` library to communicate with the server:
+- **GET /game_state**: Returns the current game state
+- **GET /health**: Simple health check endpoint
+- **POST /connect**: Register a new client connection
+- **POST /action**: Process client actions (movement, ingredient changes, etc.)
+- **POST /disconnect**: Handle client disconnection
 
-- `HttpNetworkHandler`: Manages HTTP communication with the server
-- Polling mechanism to regularly fetch game state updates
-- Sends actions to the server as HTTP POST requests
+### Request/Response Format
 
-## How It Works
+All responses are in JSON format with appropriate HTTP status codes:
 
-1. **Connection**:
-   - Client sends a POST request to `/connect`
-   - Server assigns a unique client ID and returns initial game state
-   - Client starts polling for game state updates
-
-2. **Game State Updates**:
-   - Client regularly polls the `/game_state` endpoint
-   - Server returns the current game state as JSON
-   - Client updates its local game state based on the response
-
-3. **Actions**:
-   - Client sends actions (movement, etc.) as POST requests to `/action`
-   - Server processes the action and updates the game state
-   - All clients receive the updated state in their next poll
-
-4. **Disconnection**:
-   - Client sends a POST request to `/disconnect`
-   - Server removes the client from the game
+- 200 OK: Successful request
+- 400 Bad Request: Invalid request parameters
+- 404 Not Found: Endpoint not found
+- 500 Internal Server Error: Server error
 
 ## Running the HTTP Version
 
 ### Server
 ```sh
-python -m src.server.http_server_main
+python -m src.server.server
 ```
 
 ### Client
@@ -70,24 +59,12 @@ python -m src.server.http_server_main
 python -m src.client.http_client_main
 ```
 
-## Advantages Over Socket-Based Implementation
+## Implementation Files
 
-1. **Statelessness**: HTTP is stateless, which simplifies the server implementation
-2. **Standard Protocol**: Uses a widely adopted protocol with better tooling
-3. **Error Handling**: HTTP status codes provide clear error information
-4. **Scalability**: Easier to scale with standard web infrastructure
-5. **Debugging**: Can use standard HTTP debugging tools (browser dev tools, Postman, etc.)
+### Server Files
+- `src/server/http_server.py`: Contains the HTTP server implementation
+- `src/server/server.py`: Entry point for starting the server
 
-## Limitations
-
-1. **Polling Overhead**: Regular polling creates more network traffic than socket-based push notifications
-2. **Latency**: HTTP requests may have slightly higher latency than direct sockets
-3. **Connection Management**: HTTP doesn't maintain persistent connections by default
-
-## Future Improvements
-
-1. **WebSockets**: Could be implemented for real-time updates without polling
-2. **Authentication**: Add proper authentication for clients
-3. **Rate Limiting**: Implement rate limiting to prevent abuse
-4. **Compression**: Add response compression for larger game states
-5. **Web Client**: Create a browser-based client using the HTTP API
+### Client Files
+- `src/client/http_client.py`: Contains the HTTP client implementation
+- `src/client/http_client_main.py`: Entry point for starting the HTTP client
