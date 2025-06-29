@@ -67,6 +67,17 @@ class GameHttpHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(state_dict).encode())
             return
         
+        elif path == '/status':
+            # Endpoint baru untuk Lobby Server menanyakan status
+            status_data = {
+                "game_started": self.server.game_started,
+                "player_count": len(self.server.clients_info),
+                "is_full": len(self.server.clients_info) >= config.MAX_PLAYERS_PER_SERVER 
+            }
+            self._set_headers(200)
+            self.wfile.write(json.dumps(status_data).encode())
+            return
+        
         elif path == '/health':
             # Simple health check endpoint
             self._set_headers()

@@ -11,6 +11,10 @@ import cProfile
 import pstats
 import time
 import logging
+
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, project_root)
+
 from src.shared import config
 from src.client.asset_manager import AssetManager
 from src.client.game_manager import GameManager
