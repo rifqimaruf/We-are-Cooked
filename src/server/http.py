@@ -33,11 +33,15 @@ class HttpServer:
         """Generate HTTP response"""
         tanggal = datetime.now().strftime('%c')
         resp = []
-        resp.append(f"HTTP/1.0 {kode} {message}\r\n")
+        resp.append(f"HTTP/1.1 {kode} {message}\r\n") # Ganti HTTP/1.0 menjadi HTTP/1.1
         resp.append(f"Date: {tanggal}\r\n")
-        resp.append("Connection: close\r\n")
+        # Hapus baris ini: resp.append("Connection: close\r\n")
         resp.append("Server: WeAreCooked/1.0\r\n")
         resp.append(f"Content-Length: {len(messagebody)}\r\n")
+        
+        # Tambahkan header Connection: keep-alive
+        resp.append("Connection: keep-alive\r\n") # Tambahkan ini
+        resp.append(f"Keep-Alive: timeout={config.KEEP_ALIVE_TIMEOUT}, max={config.KEEP_ALIVE_MAX_REQUESTS}\r\n") # Tambahkan ini (perlu konfigurasi baru)
         
         # Add CORS headers for browser clients
         resp.append("Access-Control-Allow-Origin: *\r\n")
@@ -428,34 +432,74 @@ class HttpServer:
         logger.info(f"Timer thread: Exiting loop. timer_thread_active={self.timer_thread_active}")
 
 def ProcessTheClient(connection, address, server):
-    """Process client connection in a separate thread"""
+    """Process client connection in a separate thread, supporting keep-alive"""
+    logger.info(f"Processing client {address} in thread.") # Logging baru
     try:
-        rcv = ""
-        while True:
-            data = connection.recv(4096)
-            if data:
-                # Convert bytes to string for processing
-                d = data.decode()
-                rcv += d
+        keep_alive_counter = 0
+        while True: # Loop untuk menangani multiple requests pada koneksi yang sama
+            # Set timeout untuk setiap read agar koneksi tidak menggantung selamanya
+            connection.settimeout(config.KEEP_ALIVE_TIMEOUT) # Perlu konfigurasi baru
+            
+            rcv = b"" # Gunakan bytes untuk menerima data
+            try:
+                # Baca header terlebih dahulu untuk menentukan panjang body
+                # Ini adalah cara sederhana untuk mengurai HTTP request
+                # Untuk robustness, Anda mungkin ingin menggunakan parser HTTP yang lebih canggih
                 
-                # Check if we've received a complete HTTP request
-                if "\r\n\r\n" in rcv:
-                    # Process the request
-                    hasil = server.proses(rcv)
-                    
-                    # Send the response
-                    connection.sendall(hasil)
-                    
-                    # Close the connection (HTTP/1.0 style)
-                    connection.close()
-                    break
-            else:
-                # No more data, close connection
-                connection.close()
+                # Baca baris pertama (request line) dan header
+                header_data = b""
+                while True:
+                    chunk = connection.recv(1) # Baca byte per byte sampai CRLF ganda
+                    if not chunk: raise ConnectionAbortedError("Client disconnected")
+                    header_data += chunk
+                    if b"\r\n\r\n" in header_data:
+                        break
+                
+                # Cek apakah ada Content-Length di header
+                headers_str = header_data.decode('utf-8', errors='ignore')
+                headers_dict = {}
+                for line in headers_str.split('\r\n')[1:]:
+                    if ': ' in line:
+                        k, v = line.split(': ', 1)
+                        headers_dict[k.lower()] = v
+                
+                content_length = int(headers_dict.get('content-length', 0))
+                
+                # Baca body jika ada
+                body_data = b""
+                if content_length > 0:
+                    remaining_body_len = content_length - (len(header_data) - headers_str.find('\r\n\r\n') - 4) # Hitung berapa body yang sudah terbaca bersama header
+                    if remaining_body_len > 0:
+                         body_data = connection.recv(remaining_body_len)
+                         if len(body_data) < remaining_body_len:
+                             # Ini bisa terjadi jika klien memutus koneksi di tengah body
+                             logger.warning(f"Incomplete body received from {address}")
+                             raise ConnectionAbortedError("Incomplete body")
+
+                full_request_data = header_data + body_data
+                
+            except socket.timeout:
+                logger.info(f"Client {address} timed out (keep-alive). Closing connection.")
+                break # Keluar dari loop, tutup koneksi
+            except (ConnectionResetError, ConnectionAbortedError):
+                logger.info(f"Client {address} disconnected gracefully or abruptly.")
                 break
+            
+            # Proses request
+            hasil = server.proses(full_request_data.decode('utf-8', errors='ignore'))
+            
+            # Kirim respons
+            connection.sendall(hasil)
+            
+            keep_alive_counter += 1
+            if keep_alive_counter >= config.KEEP_ALIVE_MAX_REQUESTS: # Perlu konfigurasi baru
+                logger.info(f"Client {address} reached max keep-alive requests. Closing connection.")
+                break # Keluar dari loop, tutup koneksi
+
     except Exception as e:
         logger.error(f"Error processing client {address}: {e}")
     finally:
+        logger.info(f"Closing connection for client {address}.") # Logging baru
         connection.close()
 
 def run_server(host='0.0.0.0', port=8000):
